@@ -248,6 +248,15 @@ class MainWindow(QMainWindow):
     def _on_save(self):
         if not self._save_file:
             return
+        reply = QMessageBox.question(
+            self, "Save Changes",
+            "Save changes to disk?\n\n"
+            "WARNING: If the game is running on this save slot, "
+            "it will overwrite your edits the next time it autosaves.\n"
+            "Close the game or use a different slot before saving.",
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel)
+        if reply != QMessageBox.StandardButton.Save:
+            return
         try:
             self._save_file.save(backup=True)
             self._update_dirty_indicator()
