@@ -127,12 +127,15 @@ class ScanEditor(QWidget):
         self._scan_entries = []
         d = self._save_file._data
 
-        for i in range(583):
+        # Real scan table starts at index 130 (sorted by digi_id).
+        # Entries 0-129 are a different data structure (header/garbage).
+        _REAL_START = 130
+        for i in range(_REAL_START, 583):
             off = SCAN_TABLE_OFFSET + i * SCAN_TABLE_STRIDE
             digi_id = struct.unpack('<H', d[off:off + 2])[0]
             scan_pct = struct.unpack('<H', d[off + 2:off + 4])[0]
-            # Only include valid Digimon IDs that exist in our database
-            if digi_id > 0 and digi_id in id_to_name and scan_pct <= 200:
+            if digi_id > 0 and digi_id in id_to_name:
+                scan_pct = min(scan_pct, 200)  # clamp stale values
                 self._scan_entries.append((i, digi_id, id_to_name[digi_id], scan_pct))
 
         self._populate_table()
