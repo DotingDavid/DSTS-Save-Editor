@@ -20,7 +20,7 @@ class StatBar(QWidget):
         self._farm = 0
         self._blue = 0
         self._max_val = 3000  # scale reference
-        self.setFixedHeight(14)
+        self.setFixedHeight(20)
         self.setMinimumWidth(120)
         self.setMouseTracking(True)
 
