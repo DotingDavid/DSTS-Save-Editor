@@ -80,9 +80,13 @@ class DigimonEditor(QWidget):
         layout.addWidget(self._header_widget)
 
         # Placeholder shown when no Digimon is selected
-        self._placeholder = QLabel("Select a Digimon from the grid to edit")
+        self._placeholder = QLabel(
+            "ANAMNESIS\nSave Editor\n\n"
+            "Select a save slot and click Load,\n"
+            "then pick a Digimon from the grid to edit.")
         self._placeholder.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 14px; padding: 40px;")
+            f"color: {TEXT_SECONDARY}; font-size: 16px; padding: 60px;"
+            f" background: transparent;")
         self._placeholder.setWordWrap(True)
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
