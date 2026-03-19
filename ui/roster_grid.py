@@ -71,16 +71,16 @@ class GridSlot(QWidget):
 
     def _update_style(self):
         if self._entry is None:
-            self.setStyleSheet(f"background: transparent;")
+            self.setStyleSheet("background: transparent;")
             return
         if self._selected:
             self.setStyleSheet(
-                f"background-color: {BG_SELECTED}; "
+                f"background-color: rgba(0, 191, 255, 0.12); "
                 f"border: 2px solid {ACCENT}; border-radius: 6px;")
         else:
             self.setStyleSheet(
-                f"background-color: {BG_INPUT}; "
-                f"border: 1px solid {BORDER}; border-radius: 6px;")
+                f"background-color: rgba(18, 18, 32, 160); "
+                f"border: 1px solid rgba(255,255,255,0.06); border-radius: 6px;")
 
     def set_selected(self, selected):
         self._selected = selected
@@ -211,7 +211,8 @@ class RosterGrid(QWidget):
 
             header = QLabel(title)
             header.setStyleSheet(
-                f"color: {color}; font-weight: bold; font-size: 12px;")
+                f"color: {color}; font-weight: bold; font-size: 11px; "
+                f"letter-spacing: 1px; background: transparent; padding-top: 4px;")
             self._main_layout.addWidget(header)
 
             grid = QGridLayout()

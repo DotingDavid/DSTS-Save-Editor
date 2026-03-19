@@ -1,25 +1,43 @@
-"""Identity tab for the Digimon editor.
+"""Identity tab — species info, nickname, core stats, evolution history.
 
-Displays and edits: name, species, level, personality, talent, bond,
-evo counter, EXP, HP, SP, nickname, evo history.
+Clean layout with grouped sections and visual hierarchy.
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
                               QLabel, QSpinBox, QComboBox, QSlider, QFrame,
-                              QLineEdit, QGroupBox, QPushButton)
+                              QLineEdit, QPushButton, QScrollArea, QGridLayout)
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QFont
 
-from ui.style import (ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
-                       STAGE_COLORS, PERS_COLORS, PERS_CATEGORY, BG_PANEL,
-                       BORDER, BG_INPUT)
+from ui.style import (ACCENT, ACCENT_DIM, TEXT_PRIMARY, TEXT_SECONDARY,
+                       TEXT_VALUE, STAGE_COLORS, PERS_COLORS, PERS_CATEGORY,
+                       BG_PANEL, BG_INPUT, BORDER, STAT_BLUE, STAT_FARM)
 from ui.icon_cache import get_icon
 from save_layout import PERSONALITY_NAMES
+
+
+def _card(title):
+    """Create a styled group card with a title."""
+    card = QWidget()
+    card.setStyleSheet(
+        f"background-color: rgba(18, 18, 32, 180); "
+        f"border: 1px solid {BORDER}; border-radius: 6px;")
+    layout = QVBoxLayout(card)
+    layout.setContentsMargins(12, 8, 12, 10)
+    layout.setSpacing(6)
+    if title:
+        lbl = QLabel(title)
+        lbl.setStyleSheet(
+            f"color: rgba(0,191,255,0.5); font-size: 9px; font-weight: bold; "
+            f"letter-spacing: 2px; border: none; background: transparent;")
+        layout.addWidget(lbl)
+    return card, layout
 
 
 class IdentityEditor(QWidget):
     """Edit identity fields for a single Digimon."""
 
-    field_changed = pyqtSignal(str, object)  # field_name, new_value
+    field_changed = pyqtSignal(str, object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -28,190 +46,225 @@ class IdentityEditor(QWidget):
         self._build_ui()
 
     def _build_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
 
-        # ── Header: icon + species info ──
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(8)
+
+        # ── Species Header Card ──
+        header_card, header_layout = _card(None)
         header = QHBoxLayout()
         header.setSpacing(12)
 
         self._icon_label = QLabel()
-        self._icon_label.setFixedSize(80, 80)
+        self._icon_label.setFixedSize(72, 72)
         self._icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._icon_label.setStyleSheet(
             f"border: 2px solid {BORDER}; border-radius: 8px; "
-            f"background-color: {BG_PANEL};")
+            f"background-color: rgba(12,12,20,200);")
         header.addWidget(self._icon_label)
 
-        info_col = QVBoxLayout()
-        info_col.setSpacing(1)
+        info = QVBoxLayout()
+        info.setSpacing(1)
+
         self._species_label = QLabel("—")
         self._species_label.setStyleSheet(
-            f"color: {TEXT_VALUE}; font-size: 15px; font-weight: bold;")
-        info_col.addWidget(self._species_label)
+            f"color: {TEXT_VALUE}; font-size: 16px; font-weight: bold; "
+            f"border: none; background: transparent;")
+        info.addWidget(self._species_label)
 
+        meta_row = QHBoxLayout()
+        meta_row.setSpacing(6)
         self._stage_label = QLabel("")
-        info_col.addWidget(self._stage_label)
-
+        self._stage_label.setStyleSheet("border: none; background: transparent;")
+        meta_row.addWidget(self._stage_label)
         self._attr_label = QLabel("")
-        self._attr_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
-        info_col.addWidget(self._attr_label)
+        self._attr_label.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 11px; border: none; background: transparent;")
+        meta_row.addWidget(self._attr_label)
+        meta_row.addStretch()
+        info.addLayout(meta_row)
 
-        self._change_species_btn = QPushButton("Change Species...")
-        self._change_species_btn.setFixedWidth(130)
-        self._change_species_btn.setStyleSheet(f"""
+        self._change_btn = QPushButton("Change Species...")
+        self._change_btn.setFixedWidth(120)
+        self._change_btn.setFixedHeight(22)
+        self._change_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: {BG_INPUT};
-                color: {TEXT_SECONDARY};
-                border: 1px solid {BORDER};
-                border-radius: 3px;
-                padding: 3px 8px;
-                font-size: 10px;
+                background: transparent; color: {TEXT_SECONDARY};
+                border: 1px solid {BORDER}; border-radius: 3px;
+                font-size: 9px; padding: 0 6px;
             }}
-            QPushButton:hover {{
-                color: {ACCENT};
-                border-color: {ACCENT};
-            }}
+            QPushButton:hover {{ color: {ACCENT}; border-color: {ACCENT}; }}
         """)
-        self._change_species_btn.clicked.connect(self._on_change_species)
-        info_col.addWidget(self._change_species_btn)
+        self._change_btn.clicked.connect(self._on_change_species)
+        info.addWidget(self._change_btn)
 
-        info_col.addStretch()
-        header.addLayout(info_col)
+        header.addLayout(info)
         header.addStretch()
-        layout.addLayout(header)
+        header_layout.addLayout(header)
+        layout.addWidget(header_card)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"color: {BORDER};")
-        layout.addWidget(sep)
-
-        # ── Nickname (editable, bypasses censorship) ──
-        nick_row = QHBoxLayout()
-        nick_row.setSpacing(6)
-        nick_lbl = QLabel("Nickname:")
-        nick_lbl.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
-        nick_lbl.setFixedWidth(65)
-        nick_row.addWidget(nick_lbl)
+        # ── Nickname Card ──
+        nick_card, nick_layout = _card("NICKNAME")
         self._nick_edit = QLineEdit()
         self._nick_edit.setMaxLength(30)
-        self._nick_edit.setPlaceholderText("(species name = no nickname)")
+        self._nick_edit.setPlaceholderText("Enter nickname (bypasses censorship)")
+        self._nick_edit.setStyleSheet(
+            f"border: none; background: transparent; color: {TEXT_VALUE}; "
+            f"font-size: 13px; padding: 2px 0;")
         self._nick_edit.editingFinished.connect(self._on_nickname_changed)
-        nick_row.addWidget(self._nick_edit)
-        layout.addLayout(nick_row)
+        nick_layout.addWidget(self._nick_edit)
+        layout.addWidget(nick_card)
 
-        # ── Core fields ──
-        form = QFormLayout()
-        form.setSpacing(5)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        # ── Core Stats Card ──
+        core_card, core_layout = _card("CORE STATS")
+        grid = QGridLayout()
+        grid.setSpacing(6)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
 
-        # Level
+        def _label(text, color=TEXT_SECONDARY):
+            l = QLabel(text)
+            l.setStyleSheet(
+                f"color: {color}; font-size: 11px; border: none; background: transparent;")
+            l.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            return l
+
+        # Row 0: Level + EXP
+        grid.addWidget(_label("Level:"), 0, 0)
         self._level_spin = QSpinBox()
         self._level_spin.setRange(1, 99)
         self._level_spin.valueChanged.connect(lambda v: self._emit("level", v))
-        form.addRow("Level:", self._level_spin)
+        grid.addWidget(self._level_spin, 0, 1)
 
-        # Personality
+        grid.addWidget(_label("EXP:"), 0, 2)
+        self._exp_spin = QSpinBox()
+        self._exp_spin.setRange(0, 9_999_999)
+        self._exp_spin.setSingleStep(1000)
+        self._exp_spin.valueChanged.connect(lambda v: self._emit("exp", v))
+        grid.addWidget(self._exp_spin, 0, 3)
+
+        # Row 1: Personality
+        grid.addWidget(_label("Personality:"), 1, 0)
         self._pers_combo = QComboBox()
         for pid, pname in sorted(PERSONALITY_NAMES.items()):
             cat = PERS_CATEGORY.get(pid, "Valor")
             self._pers_combo.addItem(f"{pname}  ({cat})", pid)
         self._pers_combo.currentIndexChanged.connect(self._on_pers_changed)
-        form.addRow("Personality:", self._pers_combo)
+        grid.addWidget(self._pers_combo, 1, 1, 1, 3)
 
-        # Talent
+        # Row 2: Talent + Bond
+        grid.addWidget(_label("Talent:"), 2, 0)
         self._talent_spin = QSpinBox()
         self._talent_spin.setRange(0, 200)
         self._talent_spin.valueChanged.connect(lambda v: self._emit("talent", v))
-        form.addRow("Talent:", self._talent_spin)
+        grid.addWidget(self._talent_spin, 2, 1)
 
-        # Bond
-        bond_row = QHBoxLayout()
+        grid.addWidget(_label("Bond:"), 2, 2)
+        bond_w = QHBoxLayout()
         self._bond_slider = QSlider(Qt.Orientation.Horizontal)
         self._bond_slider.setRange(0, 100)
         self._bond_slider.valueChanged.connect(self._on_bond_changed)
-        bond_row.addWidget(self._bond_slider)
+        bond_w.addWidget(self._bond_slider)
         self._bond_label = QLabel("0%")
-        self._bond_label.setFixedWidth(36)
+        self._bond_label.setFixedWidth(32)
+        self._bond_label.setStyleSheet(
+            f"color: {ACCENT}; font-weight: bold; font-size: 11px; "
+            f"border: none; background: transparent;")
         self._bond_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self._bond_label.setStyleSheet(f"color: {TEXT_VALUE};")
-        bond_row.addWidget(self._bond_label)
-        form.addRow("Bond:", bond_row)
+        bond_w.addWidget(self._bond_label)
+        grid.addLayout(bond_w, 2, 3)
 
-        # EXP
-        self._exp_spin = QSpinBox()
-        self._exp_spin.setRange(0, 9_999_999)
-        self._exp_spin.setSingleStep(1000)
-        self._exp_spin.valueChanged.connect(lambda v: self._emit("exp", v))
-        form.addRow("EXP:", self._exp_spin)
-
-        # Current HP
-        hp_row = QHBoxLayout()
+        # Row 3: HP + SP
+        grid.addWidget(_label("HP:", "#E57373"), 3, 0)
+        hp_w = QHBoxLayout()
         self._hp_spin = QSpinBox()
         self._hp_spin.setRange(0, 99_999)
         self._hp_spin.valueChanged.connect(lambda v: self._emit("cur_hp", v))
-        hp_row.addWidget(self._hp_spin)
-        hp_row.addWidget(QLabel("/"))
-        self._hp_max_label = QLabel("—")
-        self._hp_max_label.setStyleSheet(f"color: {TEXT_SECONDARY};")
-        hp_row.addWidget(self._hp_max_label)
-        form.addRow("HP:", hp_row)
+        hp_w.addWidget(self._hp_spin)
+        self._hp_max = QLabel("/ —")
+        self._hp_max.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 10px; border: none; background: transparent;")
+        hp_w.addWidget(self._hp_max)
+        grid.addLayout(hp_w, 3, 1)
 
-        # Current SP
-        sp_row = QHBoxLayout()
+        grid.addWidget(_label("SP:", "#CE93D8"), 3, 2)
+        sp_w = QHBoxLayout()
         self._sp_spin = QSpinBox()
         self._sp_spin.setRange(0, 99_999)
         self._sp_spin.valueChanged.connect(lambda v: self._emit("cur_sp", v))
-        sp_row.addWidget(self._sp_spin)
-        sp_row.addWidget(QLabel("/"))
-        self._sp_max_label = QLabel("—")
-        self._sp_max_label.setStyleSheet(f"color: {TEXT_SECONDARY};")
-        sp_row.addWidget(self._sp_max_label)
-        form.addRow("SP:", sp_row)
+        sp_w.addWidget(self._sp_spin)
+        self._sp_max = QLabel("/ —")
+        self._sp_max.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 10px; border: none; background: transparent;")
+        sp_w.addWidget(self._sp_max)
+        grid.addLayout(sp_w, 3, 3)
 
-        # Evo Counter
+        core_layout.addLayout(grid)
+        layout.addWidget(core_card)
+
+        # ── Evo & Metadata Card ──
+        evo_card, evo_layout = _card("EVOLUTION & METADATA")
+
+        meta_grid = QGridLayout()
+        meta_grid.setSpacing(4)
+        meta_grid.setColumnStretch(1, 1)
+        meta_grid.setColumnStretch(3, 1)
+
+        meta_grid.addWidget(_label("Evo Counter:"), 0, 0)
         self._evo_spin = QSpinBox()
         self._evo_spin.setRange(0, 255)
-        self._evo_spin.setToolTip(
-            "Blue stat grant counter. Each evo that grants blue stats increments this.\n"
-            "Reset to 0 for unlimited blue stat gains from evolution.")
+        self._evo_spin.setToolTip("Reset to 0 for unlimited blue stat gains from evolution")
         self._evo_spin.valueChanged.connect(lambda v: self._emit("evo_fwd_count", v))
-        form.addRow("Evo Counter:", self._evo_spin)
+        meta_grid.addWidget(self._evo_spin, 0, 1)
 
-        # Total Transforms (read-only)
-        self._transforms_label = QLabel("—")
-        self._transforms_label.setStyleSheet(f"color: {TEXT_SECONDARY};")
-        form.addRow("Transforms:", self._transforms_label)
+        meta_grid.addWidget(_label("Transforms:"), 0, 2)
+        self._transforms = QLabel("—")
+        self._transforms.setStyleSheet(
+            f"color: {TEXT_VALUE}; font-size: 11px; border: none; background: transparent;")
+        meta_grid.addWidget(self._transforms, 0, 3)
 
-        # Creation Hash (read-only)
-        self._hash_label = QLabel("—")
-        self._hash_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 10px;")
-        form.addRow("Hash:", self._hash_label)
+        meta_grid.addWidget(_label("Hash:"), 1, 0)
+        self._hash = QLabel("—")
+        self._hash.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 10px; font-family: monospace; "
+            f"border: none; background: transparent;")
+        meta_grid.addWidget(self._hash, 1, 1, 1, 3)
 
-        layout.addLayout(form)
+        evo_layout.addLayout(meta_grid)
 
-        # ── Evolution History ──
-        evo_header = QLabel("Evolution History")
-        evo_header.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 11px; font-weight: bold;")
-        layout.addWidget(evo_header)
+        # Evo history row
+        evo_hist_label = QLabel("Evolution History:")
+        evo_hist_label.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 10px; border: none; "
+            f"background: transparent; padding-top: 4px;")
+        evo_layout.addWidget(evo_hist_label)
 
         self._evo_row = QHBoxLayout()
-        self._evo_row.setSpacing(4)
+        self._evo_row.setSpacing(3)
         self._evo_container = QWidget()
+        self._evo_container.setStyleSheet("border: none; background: transparent;")
         self._evo_container.setLayout(self._evo_row)
-        layout.addWidget(self._evo_container)
+        evo_layout.addWidget(self._evo_container)
 
+        layout.addWidget(evo_card)
         layout.addStretch()
 
+        scroll.setWidget(container)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(scroll)
+
     def set_entry(self, entry):
-        """Load a Digimon entry dict into the editor."""
         self._updating = True
         self._entry = entry
 
-        # Header
-        pm = get_icon(entry["species"], 80)
+        pm = get_icon(entry["species"], 72)
         self._icon_label.setPixmap(pm)
         self._species_label.setText(entry["species"])
 
@@ -219,18 +272,16 @@ class IdentityEditor(QWidget):
         color = STAGE_COLORS.get(stage, TEXT_SECONDARY)
         self._stage_label.setText(stage)
         self._stage_label.setStyleSheet(
-            f"color: {color}; font-size: 11px; font-weight: bold;")
+            f"color: {color}; font-size: 11px; font-weight: bold; "
+            f"border: none; background: transparent;")
 
         attr = entry.get("attribute", "")
         dtype = entry.get("type", "")
         self._attr_label.setText(f"{attr} / {dtype}" if attr else "")
 
-        # Nickname
-        nick = entry.get("nickname")
         self._nick_edit.setText(entry.get("display_name", entry["species"]))
-
-        # Fields
         self._level_spin.setValue(entry["level"])
+        self._exp_spin.setValue(entry.get("exp", 0))
 
         idx = self._pers_combo.findData(entry["personality_id"])
         if idx >= 0:
@@ -239,36 +290,36 @@ class IdentityEditor(QWidget):
         self._talent_spin.setValue(entry["talent"])
         self._bond_slider.setValue(entry["bond"])
         self._bond_label.setText(f"{entry['bond']}%")
-        self._exp_spin.setValue(entry.get("exp", 0))
 
-        # HP/SP
         self._hp_spin.setValue(entry.get("cur_hp", 0))
-        self._hp_max_label.setText(str(entry["total"].get("hp", 0)))
+        self._hp_max.setText(f"/ {entry['total'].get('hp', 0)}")
         self._sp_spin.setValue(entry.get("cur_sp", 0))
-        self._sp_max_label.setText(str(entry["total"].get("sp", 0)))
+        self._sp_max.setText(f"/ {entry['total'].get('sp', 0)}")
 
         self._evo_spin.setValue(entry["evo_fwd_count"])
-        self._transforms_label.setText(str(entry.get("total_transforms", 0)))
-        self._hash_label.setText(f"0x{entry.get('creation_hash', 0):08X}")
+        self._transforms.setText(str(entry.get("total_transforms", 0)))
+        self._hash.setText(f"0x{entry.get('creation_hash', 0):08X}")
 
         # Evo history
         self._clear_evo_row()
         for name in entry.get("evo_history", []):
-            icon = get_icon(name, 24)
             lbl = QLabel()
-            lbl.setPixmap(icon)
+            lbl.setPixmap(get_icon(name, 22))
             lbl.setToolTip(name)
-            lbl.setFixedSize(28, 28)
+            lbl.setFixedSize(24, 24)
+            lbl.setStyleSheet("border: none; background: transparent;")
             self._evo_row.addWidget(lbl)
             arrow = QLabel("→")
-            arrow.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 10px;")
+            arrow.setStyleSheet(
+                f"color: {TEXT_SECONDARY}; font-size: 9px; border: none; background: transparent;")
             self._evo_row.addWidget(arrow)
 
         if entry.get("evo_history"):
             cur = QLabel()
-            cur.setPixmap(get_icon(entry["species"], 24))
+            cur.setPixmap(get_icon(entry["species"], 22))
             cur.setToolTip(entry["species"])
-            cur.setFixedSize(28, 28)
+            cur.setFixedSize(24, 24)
+            cur.setStyleSheet("border: none; background: transparent;")
             self._evo_row.addWidget(cur)
 
         self._evo_row.addStretch()
@@ -287,8 +338,7 @@ class IdentityEditor(QWidget):
 
     def _on_pers_changed(self, idx):
         if not self._updating and idx >= 0:
-            pid = self._pers_combo.itemData(idx)
-            self.field_changed.emit("personality", pid)
+            self.field_changed.emit("personality", self._pers_combo.itemData(idx))
 
     def _on_bond_changed(self, value):
         self._bond_label.setText(f"{value}%")
@@ -298,9 +348,9 @@ class IdentityEditor(QWidget):
     def _on_nickname_changed(self):
         if self._updating or not self._entry:
             return
-        new_name = self._nick_edit.text().strip()
-        if new_name and new_name != self._entry.get("display_name", ""):
-            self.field_changed.emit("nickname", new_name)
+        new = self._nick_edit.text().strip()
+        if new and new != self._entry.get("display_name", ""):
+            self.field_changed.emit("nickname", new)
 
     def _on_change_species(self):
         if not self._entry:
