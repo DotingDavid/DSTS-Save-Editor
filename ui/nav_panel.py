@@ -184,6 +184,7 @@ class NavPanel(QWidget):
             ("digimon", "Digimon Editor"),
             ("scan", "Scan Table"),
             ("agent", "Agent / Player"),
+            ("files", "File Manager"),
         ]
         for key, label in nav_items:
             btn = _NavButton(label)
@@ -199,10 +200,6 @@ class NavPanel(QWidget):
         batch_btn = _ToolButton("Batch Operations...")
         batch_btn.clicked.connect(self.batch_requested.emit)
         layout.addWidget(batch_btn)
-
-        backup_btn = _ToolButton("Backup Manager...")
-        backup_btn.clicked.connect(self.backup_requested.emit)
-        layout.addWidget(backup_btn)
 
         layout.addWidget(_separator())
 

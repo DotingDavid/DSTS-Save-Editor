@@ -25,7 +25,7 @@ from ui.roster_grid import RosterGrid
 from ui.scan_editor import ScanEditor
 from ui.agent_editor import AgentEditor
 from ui.batch_ops import BatchOpsDialog
-from ui.backup_manager import SaveFileManager
+from ui.file_manager import FileManagerPanel
 from ui.toast import show_toast
 from ui.pixel_bg import PixelDissolveBG
 
@@ -217,6 +217,10 @@ class MainWindow(QMainWindow):
         self._agent_editor.data_changed.connect(self._update_dirty_indicator)
         self._stack.addWidget(self._agent_editor)  # 3: agent
 
+        self._file_manager = FileManagerPanel()
+        self._file_manager.file_load_requested.connect(self._load_file)
+        self._stack.addWidget(self._file_manager)  # 4: files
+
         main_layout.addWidget(self._stack, 1)
 
     def _build_statusbar(self):
@@ -242,11 +246,12 @@ class MainWindow(QMainWindow):
     # ── View switching ──
 
     def _switch_view(self, name):
-        if not self._save_file and name != "digimon":
+        # File manager always accessible; others need a save loaded
+        if not self._save_file and name not in ("digimon", "files"):
             show_toast(self, "Load a save file first", "warning")
             self._nav.set_active_view("digimon")
             return
-        view_map = {"digimon": 0, "grid": 1, "scan": 2, "agent": 3}
+        view_map = {"digimon": 0, "grid": 1, "scan": 2, "agent": 3, "files": 4}
         idx = view_map.get(name, 1)
         self._stack.setCurrentIndex(idx)
         self._nav.set_active_view(name)
@@ -340,10 +345,8 @@ class MainWindow(QMainWindow):
     # ── Tools ──
 
     def _on_backup_manager(self):
-        dlg = SaveFileManager(self)
-        dlg.exec()
-        if dlg.restored and self._save_file:
-            self._load_file(self._save_file.path)
+        self._file_manager._refresh()
+        self._switch_view("files")
 
     def _on_batch_ops(self):
         if not self._save_file or not self._roster:
