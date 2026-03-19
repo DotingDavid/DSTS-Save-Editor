@@ -39,7 +39,6 @@ class ScanSpinDelegate(QStyledItemDelegate):
 
     def setModelData(self, editor, model, index):
         model.setData(index, editor.value(), Qt.ItemDataRole.EditRole)
-        model.setData(index, f"{editor.value()}%", Qt.ItemDataRole.DisplayRole)
 
 
 class ScanEditor(QWidget):
@@ -207,19 +206,20 @@ class ScanEditor(QWidget):
             struct.pack_into('<h', self._save_file._data, off, new_pct)
             self._save_file._mark_dirty()
             self._scan_entries[row] = (idx, digi_id, name, new_pct)
-
-            # Update display
-            item.setData(Qt.ItemDataRole.DisplayRole, f"{new_pct}%")
-            if new_pct >= 200:
-                item.setForeground(QColor(STAT_FARM))
-            elif new_pct >= 100:
-                item.setForeground(QColor(ACCENT))
-            elif new_pct > 0:
-                item.setForeground(QColor(TEXT_VALUE))
-            else:
-                item.setForeground(QColor(TEXT_SECONDARY))
-
             self.data_changed.emit()
+
+        # Always update display text and color (even if value unchanged)
+        self._table.blockSignals(True)
+        item.setData(Qt.ItemDataRole.DisplayRole, f"{new_pct}%")
+        if new_pct >= 200:
+            item.setForeground(QColor(STAT_FARM))
+        elif new_pct >= 100:
+            item.setForeground(QColor(ACCENT))
+        elif new_pct > 0:
+            item.setForeground(QColor(TEXT_VALUE))
+        else:
+            item.setForeground(QColor(TEXT_SECONDARY))
+        self._table.blockSignals(False)
 
     def _filter_table(self, text):
         text = text.lower()
