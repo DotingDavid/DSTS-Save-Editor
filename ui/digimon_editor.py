@@ -125,7 +125,7 @@ class DigimonEditor(QWidget):
         ph_layout.addWidget(sub)
 
         # Tagline
-        tag = QLabel("remember everything")
+        tag = QLabel("memory access granted")
         tag.setStyleSheet(
             "color: #00BFFF; font-size: 14px; font-weight: bold; "
             "font-style: italic; background: transparent; padding-top: 8px;")
