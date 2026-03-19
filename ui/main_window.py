@@ -27,6 +27,7 @@ from ui.agent_editor import AgentEditor
 from ui.batch_ops import BatchOpsDialog
 from ui.backup_manager import BackupManager
 from ui.toast import show_toast
+from ui.pixel_bg import PixelDissolveBG
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +56,7 @@ class MainWindow(QMainWindow):
         self.resize(1280, 800)
         self.setMinimumSize(1024, 700)
 
-        icon_path = get_app_icon_path()
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
-
+        # No custom icon yet — user will provide one later
         self.setStyleSheet(GLOBAL_STYLESHEET)
         self._build_toolbar()
         self._build_panels()
@@ -176,6 +174,10 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(central)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+
+        # Pixel dissolve background (spans entire window)
+        self._pixel_bg = PixelDissolveBG(central)
+        self._pixel_bg.lower()  # behind all other widgets
 
         # Left nav panel
         self._nav = NavPanel()
@@ -515,6 +517,11 @@ class MainWindow(QMainWindow):
                 f"color: {CLEAN_COLOR}; font-weight: bold;")
 
     # ── Close guard ──
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, '_pixel_bg'):
+            self._pixel_bg.setGeometry(self.centralWidget().rect())
 
     def closeEvent(self, event):
         if self._save_file and self._save_file.dirty:
