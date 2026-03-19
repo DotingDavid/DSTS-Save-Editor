@@ -1,11 +1,11 @@
-"""Stats tab for the Digimon editor.
+"""Stats tab — visual bars at top, editable breakdown table below.
 
-Shows 7 stats with 4-layer colored stacked bars.
-Editable: white stats, farm stats, blue stats.
+Bars show the composition. The breakdown table IS the editor —
+click any white/farm/blue value to edit it directly.
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-                              QLabel, QSpinBox, QFrame, QGroupBox, QTabWidget)
+                              QLabel, QSpinBox, QFrame)
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.style import (STAT_COLORS, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
@@ -18,8 +18,52 @@ STAT_KEYS = ["hp", "sp", "atk", "def", "int", "spi", "spd"]
 STAT_LABELS = ["HP", "SP", "ATK", "DEF", "INT", "SPI", "SPD"]
 
 
+class _EditableCell(QSpinBox):
+    """Compact spinbox styled to look like a table cell."""
+
+    def __init__(self, color, parent=None):
+        super().__init__(parent)
+        self.setRange(-99999, 99999)
+        self.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        self.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.setFixedHeight(22)
+        self.setMinimumWidth(55)
+        self.setStyleSheet(f"""
+            QSpinBox {{
+                background: transparent;
+                color: {color};
+                border: 1px solid transparent;
+                border-radius: 2px;
+                font-size: 12px;
+                font-weight: bold;
+                padding: 0 4px;
+            }}
+            QSpinBox:hover {{
+                border-color: rgba(255,255,255,0.15);
+                background: rgba(255,255,255,0.03);
+            }}
+            QSpinBox:focus {{
+                border-color: {ACCENT};
+                background: rgba(0,191,255,0.08);
+            }}
+        """)
+
+
+class _ReadOnlyCell(QLabel):
+    """Read-only table cell."""
+
+    def __init__(self, color=TEXT_SECONDARY, parent=None):
+        super().__init__("—", parent)
+        self.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.setFixedHeight(22)
+        self.setMinimumWidth(55)
+        self.setStyleSheet(
+            f"color: {color}; font-size: 12px; font-weight: bold; "
+            f"background: transparent; border: none; padding: 0 4px;")
+
+
 class StatEditor(QWidget):
-    """View stat breakdown and edit white, farm, and blue stats."""
+    """Bars at top, editable breakdown table below."""
 
     blue_stat_changed = pyqtSignal(str, int)
     white_stat_changed = pyqtSignal(str, int)
@@ -31,16 +75,17 @@ class StatEditor(QWidget):
         self._updating = False
         self._bars = {}
         self._total_labels = {}
-        self._blue_spins = {}
-        self._white_spins = {}
-        self._farm_spins = {}
-        self._breakdown_labels = {}
+        self._base_cells = {}
+        self._white_cells = {}
+        self._farm_cells = {}
+        self._blue_cells = {}
+        self._total_cells = {}
         self._build_ui()
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(3)
+        layout.setContentsMargins(10, 6, 10, 6)
+        layout.setSpacing(6)
 
         # ── Legend ──
         legend = QHBoxLayout()
@@ -48,163 +93,138 @@ class StatEditor(QWidget):
         for label, color in [("Base", STAT_BASE), ("Growth", STAT_WHITE),
                               ("Farm", STAT_FARM), ("Blue", STAT_BLUE)]:
             dot = QLabel("■")
-            dot.setStyleSheet(f"color: {color}; font-size: 12px;")
-            dot.setFixedWidth(12)
+            dot.setStyleSheet(
+                f"color: {color}; font-size: 11px; background: transparent;")
+            dot.setFixedWidth(11)
             legend.addWidget(dot)
             lbl = QLabel(label)
-            lbl.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 10px;")
+            lbl.setStyleSheet(
+                f"color: {TEXT_SECONDARY}; font-size: 10px; background: transparent;")
             legend.addWidget(lbl)
         legend.addStretch()
         layout.addLayout(legend)
 
-        # ── Stat bars with inline blue editing ──
-        grid = QGridLayout()
-        grid.setSpacing(6)
-        grid.setColumnMinimumWidth(0, 36)
-        grid.setColumnStretch(1, 1)
-        grid.setColumnMinimumWidth(2, 90)
-        grid.setColumnMinimumWidth(3, 55)
+        # ── Stat Bars (read-only visual) ──
+        bar_grid = QGridLayout()
+        bar_grid.setSpacing(3)
+        bar_grid.setColumnMinimumWidth(0, 32)
+        bar_grid.setColumnStretch(1, 1)
+        bar_grid.setColumnMinimumWidth(2, 45)
 
-        for col, text in [(0, ""), (1, ""), (2, "Blue"), (3, "Total")]:
-            h = QLabel(text)
-            h.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 10px; font-weight: bold;")
-            h.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            grid.addWidget(h, 0, col)
-
-        for row, (key, label) in enumerate(zip(STAT_KEYS, STAT_LABELS), start=1):
-            name_lbl = QLabel(label)
-            name_lbl.setStyleSheet(
-                f"color: {STAT_COLORS[key]}; font-weight: bold; font-size: 12px;")
-            name_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            grid.addWidget(name_lbl, row, 0)
+        for row, (key, label) in enumerate(zip(STAT_KEYS, STAT_LABELS)):
+            name = QLabel(label)
+            name.setStyleSheet(
+                f"color: {STAT_COLORS[key]}; font-weight: bold; font-size: 11px; "
+                f"background: transparent;")
+            name.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            bar_grid.addWidget(name, row, 0)
 
             bar = StatBar()
             self._bars[key] = bar
-            grid.addWidget(bar, row, 1)
+            bar_grid.addWidget(bar, row, 1)
 
-            spin = QSpinBox()
-            spin.setRange(-9999, 9999)
-            spin.setFixedWidth(90)
-            spin.setAlignment(Qt.AlignmentFlag.AlignRight)
-            spin.setStyleSheet(f"""
-                QSpinBox {{
-                    background-color: rgba(66, 165, 245, 0.15);
-                    border: 1px solid rgba(66, 165, 245, 0.4);
-                    color: {STAT_BLUE};
-                    font-weight: bold;
-                }}
-                QSpinBox:focus {{ border-color: {STAT_BLUE}; }}
-            """)
-            key_ref = key
-            spin.valueChanged.connect(
-                lambda v, k=key_ref: self._on_blue_changed(k, v))
-            self._blue_spins[key] = spin
-            grid.addWidget(spin, row, 2)
+            total = QLabel("—")
+            total.setStyleSheet(
+                f"color: {TEXT_VALUE}; font-weight: bold; font-size: 11px; "
+                f"background: transparent;")
+            total.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self._total_labels[key] = total
+            bar_grid.addWidget(total, row, 2)
 
-            total_lbl = QLabel("—")
-            total_lbl.setStyleSheet(f"color: {TEXT_VALUE}; font-weight: bold; font-size: 12px;")
-            total_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._total_labels[key] = total_lbl
-            grid.addWidget(total_lbl, row, 3)
+        layout.addLayout(bar_grid)
 
-        layout.addLayout(grid)
-
-        # ── Breakdown table ──
+        # ── Separator ──
         sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"color: {BORDER};")
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background: {BORDER}; border: none;")
         layout.addWidget(sep)
 
-        bd_header = QLabel("Stat Breakdown")
-        bd_header.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 11px; font-weight: bold;")
-        layout.addWidget(bd_header)
+        # ── Editable Breakdown Table ──
+        table_label = QLabel("STAT BREAKDOWN  —  click any value to edit")
+        table_label.setStyleSheet(
+            f"color: rgba(0,191,255,0.4); font-size: 9px; font-weight: bold; "
+            f"letter-spacing: 2px; background: transparent;")
+        layout.addWidget(table_label)
 
-        bd_grid = QGridLayout()
-        bd_grid.setSpacing(1)
-        for col, (text, color) in enumerate(
-                [("", TEXT_SECONDARY), ("Base", STAT_BASE), ("Growth", STAT_WHITE),
-                 ("Farm", STAT_FARM), ("Blue", STAT_BLUE), ("Total", TEXT_VALUE)]):
+        table = QGridLayout()
+        table.setSpacing(1)
+        table.setColumnMinimumWidth(0, 36)
+
+        # Column headers
+        headers = [("", TEXT_SECONDARY), ("Base", STAT_BASE),
+                   ("Growth", STAT_WHITE), ("Farm", STAT_FARM),
+                   ("Blue", STAT_BLUE), ("= Total", TEXT_VALUE)]
+        for col, (text, color) in enumerate(headers):
             h = QLabel(text)
-            h.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: bold;")
-            h.setAlignment(Qt.AlignmentFlag.AlignRight)
-            bd_grid.addWidget(h, 0, col)
+            h.setStyleSheet(
+                f"color: {color}; font-size: 9px; font-weight: bold; "
+                f"background: transparent; border: none;")
+            h.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            h.setFixedHeight(18)
+            table.addWidget(h, 0, col)
 
+        # Data rows
         for row, (key, label) in enumerate(zip(STAT_KEYS, STAT_LABELS), start=1):
-            name_lbl = QLabel(label)
-            name_lbl.setStyleSheet(
-                f"color: {STAT_COLORS[key]}; font-size: 10px; font-weight: bold;")
-            name_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
-            bd_grid.addWidget(name_lbl, row, 0)
-            self._breakdown_labels[key] = {}
-            for col, layer in enumerate(["base", "white", "farm", "blue", "total"], start=1):
-                lbl = QLabel("—")
-                lbl.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 10px;")
-                lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
-                self._breakdown_labels[key][layer] = lbl
-                bd_grid.addWidget(lbl, row, col)
-        layout.addLayout(bd_grid)
+            # Stat name
+            name = QLabel(label)
+            name.setStyleSheet(
+                f"color: {STAT_COLORS[key]}; font-size: 11px; font-weight: bold; "
+                f"background: transparent; border: none;")
+            name.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            name.setFixedHeight(22)
+            table.addWidget(name, row, 0)
 
-        # ── Growth & Farm editing (collapsible) ──
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet(f"color: {BORDER};")
-        layout.addWidget(sep2)
+            # Base (read-only)
+            base_cell = _ReadOnlyCell(STAT_BASE)
+            self._base_cells[key] = base_cell
+            table.addWidget(base_cell, row, 1)
 
-        adv_header = QLabel("Advanced Stat Editing")
-        adv_header.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 11px; font-weight: bold;")
-        layout.addWidget(adv_header)
+            # White (editable)
+            white_cell = _EditableCell(STAT_WHITE)
+            white_cell.valueChanged.connect(
+                lambda v, k=key: self._on_white_changed(k, v))
+            self._white_cells[key] = white_cell
+            table.addWidget(white_cell, row, 2)
 
-        adv_tabs = QTabWidget()
+            # Farm (editable)
+            farm_cell = _EditableCell(STAT_FARM)
+            farm_cell.valueChanged.connect(
+                lambda v, k=key: self._on_farm_changed(k, v))
+            self._farm_cells[key] = farm_cell
+            table.addWidget(farm_cell, row, 3)
 
-        # White stats tab
-        white_widget = QWidget()
-        white_grid = QGridLayout(white_widget)
-        white_grid.setSpacing(4)
-        for i, (key, label) in enumerate(zip(STAT_KEYS, STAT_LABELS)):
-            row = i // 2
-            col = (i % 2) * 2
-            lbl = QLabel(f"{label}:")
-            lbl.setStyleSheet(f"color: {STAT_WHITE}; font-size: 11px;")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            white_grid.addWidget(lbl, row, col)
-            spin = QSpinBox()
-            spin.setRange(0, 99999)
-            spin.setFixedWidth(80)
-            key_ref = key
-            spin.valueChanged.connect(
-                lambda v, k=key_ref: self._on_white_changed(k, v))
-            self._white_spins[key] = spin
-            white_grid.addWidget(spin, row, col + 1)
-        adv_tabs.addTab(white_widget, "Growth (White)")
+            # Blue (editable)
+            blue_cell = _EditableCell(STAT_BLUE)
+            blue_cell.valueChanged.connect(
+                lambda v, k=key: self._on_blue_changed(k, v))
+            self._blue_cells[key] = blue_cell
+            table.addWidget(blue_cell, row, 4)
 
-        # Farm stats tab
-        farm_widget = QWidget()
-        farm_grid = QGridLayout(farm_widget)
-        farm_grid.setSpacing(4)
-        for i, (key, label) in enumerate(zip(STAT_KEYS, STAT_LABELS)):
-            row = i // 2
-            col = (i % 2) * 2
-            lbl = QLabel(f"{label}:")
-            lbl.setStyleSheet(f"color: {STAT_FARM}; font-size: 11px;")
-            lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            farm_grid.addWidget(lbl, row, col)
-            spin = QSpinBox()
-            spin.setRange(0, 99999)
-            spin.setFixedWidth(80)
-            key_ref = key
-            spin.valueChanged.connect(
-                lambda v, k=key_ref: self._on_farm_changed(k, v))
-            self._farm_spins[key] = spin
-            farm_grid.addWidget(spin, row, col + 1)
-        adv_tabs.addTab(farm_widget, "Farm Training")
+            # Total (read-only)
+            total_cell = _ReadOnlyCell(TEXT_VALUE)
+            self._total_cells[key] = total_cell
+            table.addWidget(total_cell, row, 5)
 
-        layout.addWidget(adv_tabs, 1)  # tabs get remaining space
+        # Alternating row backgrounds
+        for row in range(1, 8):
+            if row % 2 == 0:
+                for col in range(6):
+                    w = table.itemAtPosition(row, col)
+                    if w and w.widget():
+                        current = w.widget().styleSheet()
+                        if "background: transparent" in current:
+                            w.widget().setStyleSheet(
+                                current.replace(
+                                    "background: transparent",
+                                    "background: rgba(255,255,255,0.02)"))
+
+        layout.addLayout(table)
+        layout.addStretch()
 
     def set_entry(self, entry):
         self._updating = True
         self._entry = entry
+
         max_total = max(
             (entry["total"].get(k, 0) for k in STAT_KEYS), default=1)
         max_total = max(max_total, 100)
@@ -218,20 +238,16 @@ class StatEditor(QWidget):
 
             self._bars[key].set_values(base, white, farm, blue, max_total)
             self._total_labels[key].setText(str(total))
-            self._blue_spins[key].setValue(blue)
-            self._white_spins[key].setValue(white)
-            self._farm_spins[key].setValue(farm)
 
-            self._breakdown_labels[key]["base"].setText(str(base))
-            self._breakdown_labels[key]["white"].setText(str(white))
-            self._breakdown_labels[key]["farm"].setText(str(farm))
-            self._breakdown_labels[key]["blue"].setText(str(blue))
-            self._breakdown_labels[key]["total"].setText(str(total))
+            self._base_cells[key].setText(str(base))
+            self._white_cells[key].setValue(white)
+            self._farm_cells[key].setValue(farm)
+            self._blue_cells[key].setValue(blue)
+            self._total_cells[key].setText(str(total))
 
         self._updating = False
 
     def _recalc(self, key):
-        """Recalculate total and update display for one stat."""
         if not self._entry:
             return
         base = self._entry["base"].get(key, 0)
@@ -247,16 +263,7 @@ class StatEditor(QWidget):
 
         self._bars[key].set_values(base, white, farm, blue, max_total)
         self._total_labels[key].setText(str(total))
-        self._breakdown_labels[key]["white"].setText(str(white))
-        self._breakdown_labels[key]["farm"].setText(str(farm))
-        self._breakdown_labels[key]["blue"].setText(str(blue))
-        self._breakdown_labels[key]["total"].setText(str(total))
-
-    def _on_blue_changed(self, key, value):
-        if not self._updating and self._entry:
-            self._entry["blue"][key] = value
-            self._recalc(key)
-            self.blue_stat_changed.emit(key, value)
+        self._total_cells[key].setText(str(total))
 
     def _on_white_changed(self, key, value):
         if not self._updating and self._entry:
@@ -269,3 +276,9 @@ class StatEditor(QWidget):
             self._entry["farm"][key] = value
             self._recalc(key)
             self.farm_stat_changed.emit(key, value)
+
+    def _on_blue_changed(self, key, value):
+        if not self._updating and self._entry:
+            self._entry["blue"][key] = value
+            self._recalc(key)
+            self.blue_stat_changed.emit(key, value)
