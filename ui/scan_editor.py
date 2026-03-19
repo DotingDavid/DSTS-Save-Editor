@@ -28,12 +28,18 @@ class ScanSpinDelegate(QStyledItemDelegate):
         return spin
 
     def setEditorData(self, editor, index):
-        val = index.data(Qt.ItemDataRole.EditRole)
-        if val is not None:
-            editor.setValue(int(val))
+        try:
+            val = index.data(Qt.ItemDataRole.EditRole)
+            if val is not None:
+                editor.setValue(int(val))
+            else:
+                editor.setValue(0)
+        except (TypeError, ValueError):
+            editor.setValue(0)
 
     def setModelData(self, editor, model, index):
         model.setData(index, editor.value(), Qt.ItemDataRole.EditRole)
+        model.setData(index, f"{editor.value()}%", Qt.ItemDataRole.DisplayRole)
 
 
 class ScanEditor(QWidget):
@@ -183,13 +189,16 @@ class ScanEditor(QWidget):
     def _on_cell_changed(self, row, col):
         if col != 3 or not self._save_file:
             return
+        if row < 0 or row >= len(self._scan_entries):
+            return
         item = self._table.item(row, col)
         if not item:
             return
-        new_pct = item.data(Qt.ItemDataRole.EditRole)
-        if new_pct is None:
+        try:
+            new_pct = int(item.data(Qt.ItemDataRole.EditRole) or 0)
+        except (TypeError, ValueError):
             return
-        new_pct = int(new_pct)
+        new_pct = max(0, min(200, new_pct))  # clamp to valid range
 
         idx, digi_id, name, old_pct = self._scan_entries[row]
         if new_pct != old_pct:
