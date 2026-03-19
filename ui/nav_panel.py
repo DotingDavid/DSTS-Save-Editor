@@ -63,6 +63,7 @@ class NavPanel(QWidget):
     view_requested = pyqtSignal(str)  # emits view name
     file_selected = pyqtSignal(str)   # emits file path
     batch_requested = pyqtSignal()    # emits when batch ops button clicked
+    backup_requested = pyqtSignal()   # emits when backup manager clicked
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -134,6 +135,24 @@ class NavPanel(QWidget):
         """)
         self._batch_btn.clicked.connect(self.batch_requested.emit)
         layout.addWidget(self._batch_btn)
+
+        self._backup_btn = QPushButton("  Backup Manager...")
+        self._backup_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {TEXT_SECONDARY};
+                border: none;
+                text-align: left;
+                padding: 6px 12px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {BG_HOVER};
+                color: {TEXT_PRIMARY};
+            }}
+        """)
+        self._backup_btn.clicked.connect(self.backup_requested.emit)
+        layout.addWidget(self._backup_btn)
 
         # Separator
         sep3 = QFrame()

@@ -24,6 +24,7 @@ from ui.roster_grid import RosterGrid
 from ui.scan_editor import ScanEditor
 from ui.agent_editor import AgentEditor
 from ui.batch_ops import BatchOpsDialog
+from ui.backup_manager import BackupManager
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,7 @@ class MainWindow(QMainWindow):
         self._nav.file_selected.connect(self._load_file)
         self._nav.view_requested.connect(self._switch_view)
         self._nav.batch_requested.connect(self._on_batch_ops)
+        self._nav.backup_requested.connect(self._on_backup_manager)
         main_layout.addWidget(self._nav)
 
         # Center content (stacked views)
@@ -299,7 +301,16 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self._load_file(self._save_file.path)
 
-    # ── Batch operations ──
+    # ── Tools ──
+
+    def _on_backup_manager(self):
+        if not self._save_file:
+            QMessageBox.information(self, "No Data", "Load a save file first.")
+            return
+        dlg = BackupManager(self._save_file.path, self)
+        dlg.exec()
+        if dlg.restored:
+            self._load_file(self._save_file.path)
 
     def _on_batch_ops(self):
         if not self._save_file or not self._roster:

@@ -51,10 +51,10 @@ class GridSlot(QWidget):
             pm = get_icon(entry["species"], ICON_SIZE)
             self._icon.setPixmap(pm)
             name = entry.get("nickname") or entry["species"]
-            # Truncate long names
             if len(name) > 9:
                 name = name[:8] + "…"
-            self._name_label.setText(name)
+            lv = entry.get("level", 0)
+            self._name_label.setText(f"{name} {lv}")
             self.setToolTip(
                 f"{entry.get('nickname') or entry['species']}\n"
                 f"Lv{entry['level']} {entry['personality']}\n"
