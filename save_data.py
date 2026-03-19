@@ -348,6 +348,18 @@ class SaveFile:
         """Write the evolution blue stat grant counter at +0xC8."""
         self.write_u8(entry_offset + 0xC8, count)
 
+    def write_attach_skill(self, entry_offset, slot_index, skill_id):
+        """Write an attachment skill ID (slot 0-3)."""
+        offset = entry_offset + 0x120 + slot_index * 4
+        struct.pack_into('<H', self._data, offset, skill_id & 0xFFFF)
+        self._mark_dirty()
+
+    def write_equipment(self, entry_offset, slot_index, item_id):
+        """Write an equipment item ID (slot 0-1)."""
+        offset = entry_offset + 0x130 + slot_index * 2
+        struct.pack_into('<H', self._data, offset, item_id & 0xFFFF)
+        self._mark_dirty()
+
     # ── Save to disk ──
 
     def save(self, backup=True):

@@ -1,27 +1,28 @@
 """Main application window for the DSTS Save Editor.
 
-Three-panel layout: left (slot selector + roster), center (grid/scan/agent),
-right (Digimon detail editor).
+Left nav panel + center content area (stacked views).
 """
 
 import os
+import struct
 import logging
 
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-                              QSplitter, QToolBar, QStatusBar, QLabel,
+                              QToolBar, QStatusBar, QLabel, QStackedWidget,
                               QMessageBox, QFileDialog, QPushButton, QSizePolicy)
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QAction, QIcon
 
 from save_data import SaveFile
-from ui.style import (GLOBAL_STYLESHEET, BG_PANEL, BG_INPUT, BORDER, ACCENT,
-                       TEXT_SECONDARY, TEXT_DISABLED, DIRTY_COLOR, CLEAN_COLOR)
-from ui.slot_selector import SlotSelector
-from ui.roster_list import RosterList
+from save_layout import SCAN_TABLE_OFFSET, SCAN_TABLE_STRIDE
+from ui.style import (GLOBAL_STYLESHEET, BG_PANEL, BG_INPUT, BG_HEADER,
+                       BORDER, ACCENT, TEXT_SECONDARY, TEXT_DISABLED,
+                       DIRTY_COLOR, CLEAN_COLOR)
+from ui.nav_panel import NavPanel
 from ui.digimon_editor import DigimonEditor
+from ui.roster_grid import RosterGrid
 from ui.scan_editor import ScanEditor
 from ui.agent_editor import AgentEditor
-from ui.roster_grid import RosterGrid
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,6 @@ class MainWindow(QMainWindow):
         self.resize(1280, 800)
         self.setMinimumSize(1024, 700)
 
-        # Window icon
         icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
                                   'data', 'app_icon.ico')
         if os.path.exists(icon_path):
@@ -52,37 +52,20 @@ class MainWindow(QMainWindow):
         self._build_panels()
         self._build_statusbar()
 
+    # ── Toolbar ──
+
     def _build_toolbar(self):
         tb = QToolBar("Main Toolbar")
         tb.setMovable(False)
         tb.setIconSize(QSize(16, 16))
         self.addToolBar(tb)
 
-        # Prominent Save button
+        # Save button
         self._save_btn = QPushButton("  SAVE  ")
         self._save_btn.setShortcut("Ctrl+S")
         self._save_btn.clicked.connect(self._on_save)
         self._save_btn.setEnabled(False)
-        self._save_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #1B5E20;
-                color: #81C784;
-                border: 1px solid #388E3C;
-                border-radius: 4px;
-                padding: 6px 20px;
-                font-weight: bold;
-                font-size: 13px;
-            }}
-            QPushButton:hover {{
-                background-color: #2E7D32;
-                color: #A5D6A7;
-            }}
-            QPushButton:disabled {{
-                background-color: {BG_INPUT};
-                color: {TEXT_DISABLED};
-                border-color: {BORDER};
-            }}
-        """)
+        self._set_save_btn_style(False)
         tb.addWidget(self._save_btn)
 
         self._act_save_as = QAction("Save As...", self)
@@ -99,7 +82,7 @@ class MainWindow(QMainWindow):
         self._discard_btn.setEnabled(False)
         self._discard_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: transparent;
+                background: transparent;
                 color: {TEXT_SECONDARY};
                 border: 1px solid {BORDER};
                 border-radius: 4px;
@@ -118,48 +101,56 @@ class MainWindow(QMainWindow):
         """)
         tb.addWidget(self._discard_btn)
 
-        tb.addSeparator()
-
-        # View switching buttons
-        self._view_btns = {}
-        for name, label in [("digimon", "Digimon"), ("grid", "Grid"),
-                             ("scan", "Scan Table"), ("agent", "Agent")]:
-            btn = QPushButton(label)
-            btn.setCheckable(True)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background: transparent;
-                    color: {TEXT_SECONDARY};
-                    border: 1px solid transparent;
-                    border-radius: 4px;
-                    padding: 4px 12px;
-                    font-size: 11px;
-                }}
-                QPushButton:hover {{
-                    background-color: {BG_INPUT};
-                    color: {ACCENT};
-                }}
-                QPushButton:checked {{
-                    background-color: {BG_INPUT};
-                    color: {ACCENT};
-                    border-color: {ACCENT};
-                    font-weight: bold;
-                }}
-            """)
-            btn.clicked.connect(lambda checked, n=name: self._switch_view(n))
-            self._view_btns[name] = btn
-            tb.addWidget(btn)
-        self._view_btns["digimon"].setChecked(True)
-
-        # Stretch spacer
+        # Spacer
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         tb.addWidget(spacer)
 
-        # Version label
+        # Version
         ver = QLabel("  DSTS Save Editor v0.1.0  ")
         ver.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
         tb.addWidget(ver)
+
+    def _set_save_btn_style(self, has_changes):
+        if has_changes:
+            self._save_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #1B5E20;
+                    color: #81C784;
+                    border: 2px solid #4CAF50;
+                    border-radius: 4px;
+                    padding: 6px 20px;
+                    font-weight: bold;
+                    font-size: 13px;
+                }}
+                QPushButton:hover {{
+                    background-color: #2E7D32;
+                    color: #A5D6A7;
+                }}
+            """)
+        else:
+            self._save_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {BG_INPUT};
+                    color: {TEXT_SECONDARY};
+                    border: 1px solid {BORDER};
+                    border-radius: 4px;
+                    padding: 6px 20px;
+                    font-weight: bold;
+                    font-size: 13px;
+                }}
+                QPushButton:hover {{
+                    background-color: #1B5E20;
+                    color: #81C784;
+                }}
+                QPushButton:disabled {{
+                    background-color: {BG_INPUT};
+                    color: {TEXT_DISABLED};
+                    border-color: {BORDER};
+                }}
+            """)
+
+    # ── Panels ──
 
     def _build_panels(self):
         central = QWidget()
@@ -168,46 +159,36 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # ── Left Panel (260px) ──
-        left = QWidget()
-        left.setFixedWidth(260)
-        left.setStyleSheet(
+        # Left nav panel
+        self._nav = NavPanel()
+        self._nav.setFixedWidth(220)
+        self._nav.setStyleSheet(
             f"background-color: {BG_PANEL}; border-right: 1px solid {BORDER};")
-        left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(0)
+        self._nav.file_selected.connect(self._load_file)
+        self._nav.view_requested.connect(self._switch_view)
+        main_layout.addWidget(self._nav)
 
-        self._slot_selector = SlotSelector()
-        self._slot_selector.file_selected.connect(self._load_file)
-        left_layout.addWidget(self._slot_selector)
-
-        self._roster_list = RosterList()
-        self._roster_list.digimon_selected.connect(self._on_digimon_selected)
-        left_layout.addWidget(self._roster_list)
-
-        main_layout.addWidget(left)
-
-        # ── Right Panel (stacked views) ── fills remaining space
-        from PyQt6.QtWidgets import QStackedWidget
+        # Center content (stacked views)
         self._stack = QStackedWidget()
 
         self._editor = DigimonEditor()
         self._editor.field_changed.connect(self._on_field_changed)
-        self._stack.addWidget(self._editor)  # index 0
+        self._editor.back_requested.connect(lambda: self._switch_view("grid"))
+        self._stack.addWidget(self._editor)  # 0: digimon
 
         self._grid = RosterGrid()
-        self._grid.digimon_selected.connect(self._on_grid_digimon_selected)
-        self._stack.addWidget(self._grid)  # index 1
+        self._grid.digimon_selected.connect(self._on_grid_selected)
+        self._stack.addWidget(self._grid)  # 1: grid
 
         self._scan_editor = ScanEditor()
         self._scan_editor.data_changed.connect(self._update_dirty_indicator)
-        self._stack.addWidget(self._scan_editor)  # index 2
+        self._stack.addWidget(self._scan_editor)  # 2: scan
 
         self._agent_editor = AgentEditor()
         self._agent_editor.data_changed.connect(self._update_dirty_indicator)
-        self._stack.addWidget(self._agent_editor)  # index 3
+        self._stack.addWidget(self._agent_editor)  # 3: agent
 
-        main_layout.addWidget(self._stack, 1)  # stretch factor 1
+        main_layout.addWidget(self._stack, 1)
 
     def _build_statusbar(self):
         sb = QStatusBar()
@@ -223,20 +204,45 @@ class MainWindow(QMainWindow):
         self._status_count = QLabel("")
         sb.addPermanentWidget(self._status_count)
 
+    # ── View switching ──
+
+    def _switch_view(self, name):
+        view_map = {"digimon": 0, "grid": 1, "scan": 2, "agent": 3}
+        idx = view_map.get(name, 1)
+        self._stack.setCurrentIndex(idx)
+        self._nav.set_active_view(name)
+
     # ── File operations ──
 
     def _load_file(self, path):
-        """Load a save file and populate the UI."""
         try:
             self._save_file = SaveFile(path)
             self._roster = self._save_file.read_roster()
-            self._roster_list.set_roster(self._roster)
             self._grid.set_roster(self._roster)
             self._editor.clear()
             self._scan_editor.set_save_file(self._save_file)
             self._agent_editor.set_save_file(self._save_file)
             self._current_entry = None
-            self._switch_view("grid")
+
+            # Compute scan stats for summary
+            from save_data import _get_db
+            db = _get_db()
+            id_to_name = {}
+            for row in db.execute("SELECT id, name FROM digimon"):
+                id_to_name[row["id"]] = row["name"]
+            d = self._save_file._data
+            scan_count = 0
+            scan_100 = 0
+            for i in range(130, 583):
+                off = SCAN_TABLE_OFFSET + i * SCAN_TABLE_STRIDE
+                did = struct.unpack('<H', d[off:off+2])[0]
+                pct = struct.unpack('<H', d[off+2:off+4])[0]
+                if did > 0 and did in id_to_name and pct > 0 and pct <= 200:
+                    scan_count += 1
+                    if pct >= 100:
+                        scan_100 += 1
+
+            self._nav.update_summary(self._roster, scan_count, scan_100)
 
             basename = os.path.basename(path)
             self._status_file.setText(f"File: {basename}")
@@ -244,9 +250,9 @@ class MainWindow(QMainWindow):
             self._update_dirty_indicator()
             self._save_btn.setEnabled(True)
             self._act_save_as.setEnabled(True)
+            self._switch_view("grid")
 
             logger.info("Loaded %s: %d Digimon", basename, len(self._roster))
-
         except Exception as e:
             QMessageBox.critical(self, "Load Error", f"Failed to load save file:\n{e}")
             logger.error("Load failed: %s", e)
@@ -257,9 +263,9 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(
             self, "Save Changes",
             "Save changes to disk?\n\n"
-            "WARNING: If the game is running on this save slot, "
-            "it will overwrite your edits the next time it autosaves.\n"
-            "Close the game or use a different slot before saving.",
+            "If the game is running on this save slot, it will overwrite "
+            "your edits on its next autosave. Close the game or use a "
+            "different slot.",
             QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel)
         if reply != QMessageBox.StandardButton.Save:
             return
@@ -281,27 +287,19 @@ class MainWindow(QMainWindow):
             self._save_file.path = path
             self._on_save()
 
-    # ── View switching ──
-
-    def _switch_view(self, name):
-        """Switch between Digimon editor, grid, scan table, and agent data."""
-        view_map = {"digimon": 0, "grid": 1, "scan": 2, "agent": 3}
-        idx = view_map.get(name, 0)
-        self._stack.setCurrentIndex(idx)
-        # Update button states
-        for key, btn in self._view_btns.items():
-            btn.setChecked(key == name)
+    def _on_discard(self):
+        if not self._save_file:
+            return
+        reply = QMessageBox.question(
+            self, "Discard Changes",
+            "Discard all unsaved changes and reload from disk?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self._load_file(self._save_file.path)
 
     # ── Selection ──
 
-    def _on_digimon_selected(self, entry):
-        """Called when user clicks a Digimon in the roster list."""
-        self._current_entry = entry
-        self._editor.set_entry(entry)
-        self._switch_view("digimon")
-
-    def _on_grid_digimon_selected(self, entry):
-        """Called when user clicks a Digimon in the grid view."""
+    def _on_grid_selected(self, entry):
         self._current_entry = entry
         self._editor.set_entry(entry)
         self._switch_view("digimon")
@@ -309,10 +307,8 @@ class MainWindow(QMainWindow):
     # ── Editing ──
 
     def _on_field_changed(self, field, value):
-        """Handle edits from the detail editor."""
         if not self._save_file or not self._current_entry:
             return
-
         offset = self._current_entry["_offset"]
 
         if field == "level":
@@ -326,63 +322,31 @@ class MainWindow(QMainWindow):
         elif field == "evo_fwd_count":
             self._save_file.write_evo_counter(offset, value)
         elif field.startswith("blue_"):
-            stat_key = field[5:]  # e.g., "blue_hp" -> "hp"
+            stat_key = field[5:]
             idx = STAT_KEY_TO_INDEX.get(stat_key)
             if idx is not None:
                 self._save_file.write_blue_stat(offset, idx, value)
+        elif field.startswith("attach_skill_"):
+            slot = int(field.split("_")[-1])
+            self._save_file.write_attach_skill(offset, slot, value)
+        elif field.startswith("equip_"):
+            slot = int(field.split("_")[-1])
+            self._save_file.write_equipment(offset, slot, value)
 
         self._update_dirty_indicator()
-
-    def _on_discard(self):
-        """Reload the file, discarding all in-memory changes."""
-        if not self._save_file:
-            return
-        reply = QMessageBox.question(
-            self, "Discard Changes",
-            "Discard all unsaved changes and reload from disk?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            self._load_file(self._save_file.path)
 
     def _update_dirty_indicator(self):
         is_dirty = self._save_file and self._save_file.dirty
         self._discard_btn.setEnabled(bool(is_dirty))
+        self._set_save_btn_style(bool(is_dirty))
         if is_dirty:
             self._status_dirty.setText("● Unsaved Changes")
-            self._status_dirty.setStyleSheet(f"color: {DIRTY_COLOR}; font-weight: bold;")
-            self._save_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: #1B5E20;
-                    color: #81C784;
-                    border: 2px solid #4CAF50;
-                    border-radius: 4px;
-                    padding: 6px 20px;
-                    font-weight: bold;
-                    font-size: 13px;
-                }}
-                QPushButton:hover {{
-                    background-color: #2E7D32;
-                    color: #A5D6A7;
-                }}
-            """)
+            self._status_dirty.setStyleSheet(
+                f"color: {DIRTY_COLOR}; font-weight: bold;")
         else:
             self._status_dirty.setText("● Saved")
-            self._status_dirty.setStyleSheet(f"color: {CLEAN_COLOR}; font-weight: bold;")
-            self._save_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {BG_INPUT};
-                    color: {TEXT_SECONDARY};
-                    border: 1px solid {BORDER};
-                    border-radius: 4px;
-                    padding: 6px 20px;
-                    font-weight: bold;
-                    font-size: 13px;
-                }}
-                QPushButton:hover {{
-                    background-color: #1B5E20;
-                    color: #81C784;
-                }}
-            """)
+            self._status_dirty.setStyleSheet(
+                f"color: {CLEAN_COLOR}; font-weight: bold;")
 
     # ── Close guard ──
 

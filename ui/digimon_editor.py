@@ -3,8 +3,9 @@
 Contains tabs: Identity, Stats, Skills & Equipment.
 """
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
+                              QTabWidget, QLabel, QPushButton)
+from PyQt6.QtCore import pyqtSignal, Qt
 
 from ui.style import TEXT_SECONDARY
 from ui.identity_editor import IdentityEditor
@@ -16,6 +17,7 @@ class DigimonEditor(QWidget):
     """Right panel: tabbed editor for one Digimon."""
 
     field_changed = pyqtSignal(str, object)  # field_name, new_value
+    back_requested = pyqtSignal()  # emitted when user clicks back to grid
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -25,12 +27,43 @@ class DigimonEditor(QWidget):
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Header bar with back button and Digimon name
+        header = QHBoxLayout()
+        header.setContentsMargins(8, 6, 8, 6)
+        self._back_btn = QPushButton("< Back to Grid")
+        self._back_btn.clicked.connect(self.back_requested.emit)
+        self._back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {TEXT_SECONDARY};
+                border: none;
+                font-size: 11px;
+                padding: 4px 8px;
+            }}
+            QPushButton:hover {{
+                color: #00BFFF;
+            }}
+        """)
+        header.addWidget(self._back_btn)
+        self._header_name = QLabel("")
+        self._header_name.setStyleSheet(
+            "color: #E8E8F0; font-size: 13px; font-weight: bold;")
+        self._header_name.setAlignment(Qt.AlignmentFlag.AlignRight)
+        header.addWidget(self._header_name)
+
+        self._header_widget = QWidget()
+        self._header_widget.setLayout(header)
+        self._header_widget.hide()
+        layout.addWidget(self._header_widget)
 
         # Placeholder shown when no Digimon is selected
-        self._placeholder = QLabel("Select a Digimon to edit")
+        self._placeholder = QLabel("Select a Digimon from the grid to edit")
         self._placeholder.setStyleSheet(
             f"color: {TEXT_SECONDARY}; font-size: 14px; padding: 40px;")
         self._placeholder.setWordWrap(True)
+        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Tabbed editor
         self._tabs = QTabWidget()
@@ -45,6 +78,7 @@ class DigimonEditor(QWidget):
         self._tabs.addTab(self._stats, "Stats")
 
         self._skills = SkillsEditor()
+        self._skills.field_changed.connect(self._on_field_changed)
         self._tabs.addTab(self._skills, "Skills")
 
         self._tabs.hide()
@@ -55,7 +89,10 @@ class DigimonEditor(QWidget):
         """Load a Digimon entry into all tabs."""
         self._entry = entry
         self._placeholder.hide()
+        self._header_widget.show()
         self._tabs.show()
+        name = entry.get("nickname") or entry["species"]
+        self._header_name.setText(f"{name}  Lv{entry['level']}")
         self._identity.set_entry(entry)
         self._stats.set_entry(entry)
         self._skills.set_entry(entry)
@@ -64,6 +101,7 @@ class DigimonEditor(QWidget):
         """Show placeholder when nothing is selected."""
         self._entry = None
         self._tabs.hide()
+        self._header_widget.hide()
         self._placeholder.show()
 
     def _on_field_changed(self, field, value):
