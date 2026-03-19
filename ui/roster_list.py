@@ -5,7 +5,7 @@ with icons and compact info. Clicking an entry selects it.
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QScrollArea,
-                              QLabel, QHBoxLayout, QSizePolicy)
+                              QLabel, QHBoxLayout, QSizePolicy, QLineEdit)
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QCursor
 
@@ -94,6 +94,15 @@ class RosterList(QWidget):
     def _build_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Search bar
+        self._search = QLineEdit()
+        self._search.setPlaceholderText("Search roster...")
+        self._search.setClearButtonEnabled(True)
+        self._search.setContentsMargins(4, 4, 4, 2)
+        self._search.textChanged.connect(self._filter)
+        outer.addWidget(self._search)
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -159,3 +168,16 @@ class RosterList(QWidget):
             sender.set_selected(True)
             self._current_item = sender
         self.digimon_selected.emit(entry)
+
+    def _filter(self, text):
+        """Show/hide roster items based on search text."""
+        text = text.lower().strip()
+        for item in self._items:
+            if not text:
+                item.setVisible(True)
+            else:
+                name = (item._entry.get("nickname") or
+                        item._entry.get("species", "")).lower()
+                species = item._entry.get("species", "").lower()
+                visible = text in name or text in species
+                item.setVisible(visible)

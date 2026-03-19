@@ -21,6 +21,7 @@ from ui.roster_list import RosterList
 from ui.digimon_editor import DigimonEditor
 from ui.scan_editor import ScanEditor
 from ui.agent_editor import AgentEditor
+from ui.roster_grid import RosterGrid
 
 logger = logging.getLogger(__name__)
 
@@ -121,8 +122,8 @@ class MainWindow(QMainWindow):
 
         # View switching buttons
         self._view_btns = {}
-        for name, label in [("digimon", "Digimon"), ("scan", "Scan Table"),
-                             ("agent", "Agent")]:
+        for name, label in [("digimon", "Digimon"), ("grid", "Grid"),
+                             ("scan", "Scan Table"), ("agent", "Agent")]:
             btn = QPushButton(label)
             btn.setCheckable(True)
             btn.setStyleSheet(f"""
@@ -194,13 +195,17 @@ class MainWindow(QMainWindow):
         self._editor.field_changed.connect(self._on_field_changed)
         self._stack.addWidget(self._editor)  # index 0
 
+        self._grid = RosterGrid()
+        self._grid.digimon_selected.connect(self._on_grid_digimon_selected)
+        self._stack.addWidget(self._grid)  # index 1
+
         self._scan_editor = ScanEditor()
         self._scan_editor.data_changed.connect(self._update_dirty_indicator)
-        self._stack.addWidget(self._scan_editor)  # index 1
+        self._stack.addWidget(self._scan_editor)  # index 2
 
         self._agent_editor = AgentEditor()
         self._agent_editor.data_changed.connect(self._update_dirty_indicator)
-        self._stack.addWidget(self._agent_editor)  # index 2
+        self._stack.addWidget(self._agent_editor)  # index 3
 
         main_layout.addWidget(self._stack, 1)  # stretch factor 1
 
@@ -226,11 +231,12 @@ class MainWindow(QMainWindow):
             self._save_file = SaveFile(path)
             self._roster = self._save_file.read_roster()
             self._roster_list.set_roster(self._roster)
+            self._grid.set_roster(self._roster)
             self._editor.clear()
             self._scan_editor.set_save_file(self._save_file)
             self._agent_editor.set_save_file(self._save_file)
             self._current_entry = None
-            self._switch_view("digimon")
+            self._switch_view("grid")
 
             basename = os.path.basename(path)
             self._status_file.setText(f"File: {basename}")
@@ -278,8 +284,8 @@ class MainWindow(QMainWindow):
     # ── View switching ──
 
     def _switch_view(self, name):
-        """Switch between Digimon editor, scan table, and agent data."""
-        view_map = {"digimon": 0, "scan": 1, "agent": 2}
+        """Switch between Digimon editor, grid, scan table, and agent data."""
+        view_map = {"digimon": 0, "grid": 1, "scan": 2, "agent": 3}
         idx = view_map.get(name, 0)
         self._stack.setCurrentIndex(idx)
         # Update button states
@@ -290,6 +296,12 @@ class MainWindow(QMainWindow):
 
     def _on_digimon_selected(self, entry):
         """Called when user clicks a Digimon in the roster list."""
+        self._current_entry = entry
+        self._editor.set_entry(entry)
+        self._switch_view("digimon")
+
+    def _on_grid_digimon_selected(self, entry):
+        """Called when user clicks a Digimon in the grid view."""
         self._current_entry = entry
         self._editor.set_entry(entry)
         self._switch_view("digimon")
