@@ -150,11 +150,19 @@ QComboBox::drop-down {{
     width: 20px;
 }}
 QComboBox QAbstractItemView {{
-    background-color: {BG_INPUT};
+    background-color: #1E1E37;
     color: {TEXT_PRIMARY};
-    selection-background-color: {BG_HOVER};
+    selection-background-color: #252545;
     selection-color: {ACCENT};
     border: 1px solid {BORDER};
+    outline: none;
+}}
+QComboBox QAbstractItemView::item {{
+    background-color: #1E1E37;
+    padding: 4px 8px;
+}}
+QComboBox QAbstractItemView::item:selected {{
+    background-color: #252545;
 }}
 
 QSpinBox {{
