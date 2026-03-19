@@ -9,13 +9,13 @@ import logging
 
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
                               QSplitter, QToolBar, QStatusBar, QLabel,
-                              QMessageBox, QFileDialog)
+                              QMessageBox, QFileDialog, QPushButton, QSizePolicy)
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QAction, QIcon
 
 from save_data import SaveFile
-from ui.style import (GLOBAL_STYLESHEET, BG_PANEL, BORDER, ACCENT,
-                       TEXT_SECONDARY, DIRTY_COLOR, CLEAN_COLOR)
+from ui.style import (GLOBAL_STYLESHEET, BG_PANEL, BG_INPUT, BORDER, ACCENT,
+                       TEXT_SECONDARY, TEXT_DISABLED, DIRTY_COLOR, CLEAN_COLOR)
 from ui.slot_selector import SlotSelector
 from ui.roster_list import RosterList
 from ui.digimon_editor import DigimonEditor
@@ -55,11 +55,32 @@ class MainWindow(QMainWindow):
         tb.setIconSize(QSize(16, 16))
         self.addToolBar(tb)
 
-        self._act_save = QAction("Save", self)
-        self._act_save.setShortcut("Ctrl+S")
-        self._act_save.triggered.connect(self._on_save)
-        self._act_save.setEnabled(False)
-        tb.addAction(self._act_save)
+        # Prominent Save button
+        self._save_btn = QPushButton("  SAVE  ")
+        self._save_btn.setShortcut("Ctrl+S")
+        self._save_btn.clicked.connect(self._on_save)
+        self._save_btn.setEnabled(False)
+        self._save_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #1B5E20;
+                color: #81C784;
+                border: 1px solid #388E3C;
+                border-radius: 4px;
+                padding: 6px 20px;
+                font-weight: bold;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background-color: #2E7D32;
+                color: #A5D6A7;
+            }}
+            QPushButton:disabled {{
+                background-color: {BG_INPUT};
+                color: {TEXT_DISABLED};
+                border-color: {BORDER};
+            }}
+        """)
+        tb.addWidget(self._save_btn)
 
         self._act_save_as = QAction("Save As...", self)
         self._act_save_as.setShortcut("Ctrl+Shift+S")
@@ -69,10 +90,37 @@ class MainWindow(QMainWindow):
 
         tb.addSeparator()
 
-        # Spacer
+        # Discard button
+        self._discard_btn = QPushButton("Discard Changes")
+        self._discard_btn.clicked.connect(self._on_discard)
+        self._discard_btn.setEnabled(False)
+        self._discard_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {TEXT_SECONDARY};
+                border: 1px solid {BORDER};
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background-color: #3E2723;
+                color: #EF5350;
+                border-color: #EF5350;
+            }}
+            QPushButton:disabled {{
+                color: {TEXT_DISABLED};
+                border-color: transparent;
+            }}
+        """)
+        tb.addWidget(self._discard_btn)
+
+        # Stretch spacer
         spacer = QWidget()
-        spacer.setFixedWidth(1)
-        spacer.setStyleSheet("background: transparent;")
+        spacer.setSizePolicy(spacer.sizePolicy().horizontalPolicy(),
+                             spacer.sizePolicy().verticalPolicy())
+        from PyQt6.QtWidgets import QSizePolicy
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         tb.addWidget(spacer)
 
         # Version label
@@ -204,13 +252,56 @@ class MainWindow(QMainWindow):
 
         self._update_dirty_indicator()
 
+    def _on_discard(self):
+        """Reload the file, discarding all in-memory changes."""
+        if not self._save_file:
+            return
+        reply = QMessageBox.question(
+            self, "Discard Changes",
+            "Discard all unsaved changes and reload from disk?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self._load_file(self._save_file.path)
+
     def _update_dirty_indicator(self):
-        if self._save_file and self._save_file.dirty:
-            self._status_dirty.setText("● Modified")
+        is_dirty = self._save_file and self._save_file.dirty
+        self._discard_btn.setEnabled(bool(is_dirty))
+        if is_dirty:
+            self._status_dirty.setText("● Unsaved Changes")
             self._status_dirty.setStyleSheet(f"color: {DIRTY_COLOR}; font-weight: bold;")
+            self._save_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #1B5E20;
+                    color: #81C784;
+                    border: 2px solid #4CAF50;
+                    border-radius: 4px;
+                    padding: 6px 20px;
+                    font-weight: bold;
+                    font-size: 13px;
+                }}
+                QPushButton:hover {{
+                    background-color: #2E7D32;
+                    color: #A5D6A7;
+                }}
+            """)
         else:
             self._status_dirty.setText("● Saved")
             self._status_dirty.setStyleSheet(f"color: {CLEAN_COLOR}; font-weight: bold;")
+            self._save_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {BG_INPUT};
+                    color: {TEXT_SECONDARY};
+                    border: 1px solid {BORDER};
+                    border-radius: 4px;
+                    padding: 6px 20px;
+                    font-weight: bold;
+                    font-size: 13px;
+                }}
+                QPushButton:hover {{
+                    background-color: #1B5E20;
+                    color: #81C784;
+                }}
+            """)
 
     # ── Close guard ──
 
