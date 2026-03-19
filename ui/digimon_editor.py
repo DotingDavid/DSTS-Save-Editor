@@ -75,6 +75,10 @@ class DigimonEditor(QWidget):
         self._stats = StatEditor()
         self._stats.blue_stat_changed.connect(
             lambda key, val: self._on_field_changed(f"blue_{key}", val))
+        self._stats.white_stat_changed.connect(
+            lambda key, val: self._on_field_changed(f"white_{key}", val))
+        self._stats.farm_stat_changed.connect(
+            lambda key, val: self._on_field_changed(f"farm_{key}", val))
         self._tabs.addTab(self._stats, "Stats")
 
         self._skills = SkillsEditor()

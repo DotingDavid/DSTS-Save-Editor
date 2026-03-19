@@ -231,6 +231,9 @@ class SaveFile:
                 if farm_hash > 0x100:
                     creation_hash = farm_hash
 
+            exp = struct.unpack('<I', d[offset + 0x64:offset + 0x68])[0]
+            cur_hp = struct.unpack('<i', d[offset + 0x6C:offset + 0x70])[0]
+            cur_sp = struct.unpack('<i', d[offset + 0x70:offset + 0x74])[0]
             evo_fwd = d[offset + 0xC8]
             total_transforms = struct.unpack('<I', d[offset + 0x138:offset + 0x13C])[0]
             equip_1 = struct.unpack('<h', d[offset + 0x130:offset + 0x132])[0]
@@ -288,6 +291,9 @@ class SaveFile:
                 "evo_fwd_count": evo_fwd,
                 "total_transforms": total_transforms,
                 "creation_hash": creation_hash,
+                "exp": exp,
+                "cur_hp": cur_hp,
+                "cur_sp": cur_sp,
                 "equip_1": equip_1,
                 "equip_2": equip_2,
                 "attach_skills": attach_skills,
@@ -343,6 +349,39 @@ class SaveFile:
     def write_level(self, entry_offset, level):
         """Write level (1-99)."""
         self.write_i32(entry_offset + 0x60, level)
+
+    def write_nickname(self, entry_offset, name):
+        """Write a nickname (up to 30 chars ASCII). Pads with null bytes."""
+        name_bytes = name.encode('ascii', errors='replace')[:30]
+        # Clear the full 32-byte name field
+        for i in range(32):
+            self._data[entry_offset + i] = 0
+        # Write the new name
+        for i, b in enumerate(name_bytes):
+            self._data[entry_offset + i] = b
+        self._mark_dirty()
+
+    def write_white_stat(self, entry_offset, stat_index, value):
+        """Write a white (growth) stat. stat_index: 0=HP, 1=SP, 2=ATK, etc."""
+        offset = entry_offset + 0x74 + stat_index * 4
+        self.write_i32(offset, value)
+
+    def write_farm_stat(self, entry_offset, stat_index, value):
+        """Write a farm training stat (stored x10). stat_index: 0=HP..."""
+        offset = entry_offset + 0x90 + stat_index * 4
+        self.write_i32(offset, value * 10)
+
+    def write_exp(self, entry_offset, exp):
+        """Write total EXP."""
+        self.write_i32(entry_offset + 0x64, exp)
+
+    def write_cur_hp(self, entry_offset, hp):
+        """Write current HP."""
+        self.write_i32(entry_offset + 0x6C, hp)
+
+    def write_cur_sp(self, entry_offset, sp):
+        """Write current SP."""
+        self.write_i32(entry_offset + 0x70, sp)
 
     def write_evo_counter(self, entry_offset, count):
         """Write the evolution blue stat grant counter at +0xC8."""

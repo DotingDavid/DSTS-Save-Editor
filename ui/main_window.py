@@ -350,6 +350,24 @@ class MainWindow(QMainWindow):
             idx = STAT_KEY_TO_INDEX.get(stat_key)
             if idx is not None:
                 self._save_file.write_blue_stat(offset, idx, value)
+        elif field.startswith("white_"):
+            stat_key = field[6:]
+            idx = STAT_KEY_TO_INDEX.get(stat_key)
+            if idx is not None:
+                self._save_file.write_white_stat(offset, idx, value)
+        elif field.startswith("farm_"):
+            stat_key = field[5:]
+            idx = STAT_KEY_TO_INDEX.get(stat_key)
+            if idx is not None:
+                self._save_file.write_farm_stat(offset, idx, value)
+        elif field == "nickname":
+            self._save_file.write_nickname(offset, value)
+        elif field == "exp":
+            self._save_file.write_exp(offset, value)
+        elif field == "cur_hp":
+            self._save_file.write_cur_hp(offset, value)
+        elif field == "cur_sp":
+            self._save_file.write_cur_sp(offset, value)
         elif field.startswith("attach_skill_"):
             slot = int(field.split("_")[-1])
             self._save_file.write_attach_skill(offset, slot, value)

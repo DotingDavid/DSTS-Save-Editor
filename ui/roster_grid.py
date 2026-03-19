@@ -3,8 +3,9 @@
 Displays Digimon as a grid of clickable icons, grouped by Party/Box/Farm.
 """
 
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QScrollArea, QLabel,
-                              QGridLayout, QSizePolicy, QToolTip)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
+                              QLabel, QGridLayout, QSizePolicy, QLineEdit,
+                              QComboBox)
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QCursor, QPixmap
 
@@ -108,12 +109,37 @@ class RosterGrid(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._slots = []
+        self._roster = []
         self._current_slot = None
         self._build_ui()
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # Search and sort bar
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(8, 6, 8, 6)
+        toolbar.setSpacing(6)
+
+        self._search = QLineEdit()
+        self._search.setPlaceholderText("Search Digimon...")
+        self._search.setClearButtonEnabled(True)
+        self._search.textChanged.connect(self._filter)
+        toolbar.addWidget(self._search, 1)
+
+        sort_label = QLabel("Sort:")
+        sort_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
+        toolbar.addWidget(sort_label)
+        self._sort_combo = QComboBox()
+        self._sort_combo.addItems(["Default", "Name", "Level ↓", "Level ↑",
+                                    "Stage", "Personality"])
+        self._sort_combo.currentIndexChanged.connect(self._on_sort_changed)
+        self._sort_combo.setFixedWidth(110)
+        toolbar.addWidget(self._sort_combo)
+
+        outer.addLayout(toolbar)
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -128,6 +154,11 @@ class RosterGrid(QWidget):
 
     def set_roster(self, roster):
         """Populate grid with Digimon entries."""
+        self._roster = roster
+        self._rebuild_grid(roster)
+
+    def _rebuild_grid(self, roster):
+        """Internal: rebuild grid from a (possibly filtered/sorted) roster."""
         self._slots.clear()
         self._current_slot = None
 
@@ -191,3 +222,33 @@ class RosterGrid(QWidget):
             sender.set_selected(True)
             self._current_slot = sender
         self.digimon_selected.emit(entry)
+
+    def _filter(self, text):
+        """Filter grid by search text."""
+        text = text.lower().strip()
+        if not text:
+            self._rebuild_grid(self._roster)
+            return
+        filtered = [e for e in self._roster
+                    if text in (e.get("nickname") or e["species"]).lower()
+                    or text in e["species"].lower()]
+        self._rebuild_grid(filtered)
+
+    def _on_sort_changed(self, idx):
+        """Sort grid by selected criteria."""
+        STAGE_ORDER = {
+            "In-Training I": 0, "In-Training II": 1, "Rookie": 2,
+            "Champion": 3, "Armor": 4, "Ultimate": 5, "Mega": 6, "Mega+": 7,
+        }
+        roster = list(self._roster)
+        if idx == 1:  # Name
+            roster.sort(key=lambda e: (e.get("nickname") or e["species"]).lower())
+        elif idx == 2:  # Level desc
+            roster.sort(key=lambda e: e["level"], reverse=True)
+        elif idx == 3:  # Level asc
+            roster.sort(key=lambda e: e["level"])
+        elif idx == 4:  # Stage
+            roster.sort(key=lambda e: STAGE_ORDER.get(e.get("stage", ""), 99))
+        elif idx == 5:  # Personality
+            roster.sort(key=lambda e: e.get("personality", ""))
+        self._rebuild_grid(roster)
