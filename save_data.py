@@ -227,6 +227,28 @@ class SaveFile:
 
             nickname = entry_name if entry_name != info["name"] else None
 
+            # Determine location (party vs box vs farm)
+            if 0x001000 <= offset < 0x009000:
+                active_flag = struct.unpack('<I', d[offset + 0x11C:offset + 0x120])[0]
+                location = "party" if active_flag == 1 else "box"
+            elif 0x053000 <= offset < 0x060000:
+                location = "farm"
+            else:
+                location = "unknown"
+
+            # Evolution history
+            evo_history = []
+            for x in (0x108, 0x10C, 0x110, 0x114, 0x118):
+                prev_id = struct.unpack('<I', d[offset + x:offset + x + 4])[0]
+                if prev_id > 0:
+                    prev_info = get_digimon_info(prev_id)
+                    if prev_info:
+                        evo_history.append(prev_info["name"])
+                    else:
+                        break
+                else:
+                    break
+
             entry = {
                 "_offset": offset,
                 "db_id": db_id,
@@ -251,6 +273,8 @@ class SaveFile:
                 "creation_hash": creation_hash,
                 "equip_1": equip_1,
                 "equip_2": equip_2,
+                "location": location,
+                "evo_history": evo_history,
             }
             results.append(entry)
 
