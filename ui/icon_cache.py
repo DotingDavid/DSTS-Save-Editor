@@ -5,7 +5,7 @@ Loads 256x256 PNGs from data/icons/ and caches scaled QPixmaps.
 
 import os
 from PyQt6.QtGui import QPixmap, QPixmapCache
-from PyQt6.QtCore import QSize
+from PyQt6.QtCore import QSize, Qt
 
 _ICON_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'icons')
 
@@ -56,7 +56,8 @@ def get_icon(name_or_id, size=64):
         pm = QPixmap(size, size)
         pm.fill()
     else:
-        pm = pm.scaled(size, size, transformMode=1)  # SmoothTransformation
+        pm = pm.scaled(QSize(size, size),
+                       transformMode=Qt.TransformationMode.SmoothTransformation)
 
     QPixmapCache.insert(cache_key, pm)
     return pm
