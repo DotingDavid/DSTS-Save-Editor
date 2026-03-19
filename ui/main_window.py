@@ -177,21 +177,23 @@ class MainWindow(QMainWindow):
 
         # Pixel dissolve background (spans entire window)
         self._pixel_bg = PixelDissolveBG(central)
+        self._pixel_bg.setGeometry(0, 0, 1280, 800)
         self._pixel_bg.lower()  # behind all other widgets
 
-        # Left nav panel
+        # Left nav panel — semi-transparent so pixel BG shows through
         self._nav = NavPanel()
         self._nav.setFixedWidth(220)
         self._nav.setStyleSheet(
-            f"background-color: {BG_PANEL}; border-right: 1px solid {BORDER};")
+            f"background-color: rgba(18, 18, 32, 200); border-right: 1px solid {BORDER};")
         self._nav.file_selected.connect(self._load_file)
         self._nav.view_requested.connect(self._switch_view)
         self._nav.batch_requested.connect(self._on_batch_ops)
         self._nav.backup_requested.connect(self._on_backup_manager)
         main_layout.addWidget(self._nav)
 
-        # Center content (stacked views)
+        # Center content (stacked views) — transparent so pixel BG shows
         self._stack = QStackedWidget()
+        self._stack.setStyleSheet("background: transparent;")
 
         self._editor = DigimonEditor()
         self._editor.field_changed.connect(self._on_field_changed)

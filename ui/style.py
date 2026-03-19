@@ -64,8 +64,13 @@ CLEAN_COLOR = "#81C784"
 
 
 GLOBAL_STYLESHEET = f"""
-QMainWindow, QWidget {{
+QMainWindow {{
     background-color: {BG_WINDOW};
+    color: {TEXT_PRIMARY};
+    font-family: "Segoe UI", sans-serif;
+    font-size: 12px;
+}}
+QWidget {{
     color: {TEXT_PRIMARY};
     font-family: "Segoe UI", sans-serif;
     font-size: 12px;
