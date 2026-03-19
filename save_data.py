@@ -176,9 +176,20 @@ class SaveFile:
         d = self._data
         stat_names = ['hp', 'sp', 'atk', 'def', 'int', 'spi', 'spd']
 
+        # Pre-build lookup of all valid Digimon IDs (avoids per-offset DB queries)
+        db = _get_db()
+        id_to_info = {}
+        for row in db.execute("SELECT id, name, stage, attribute, type FROM digimon"):
+            id_to_info[row["id"]] = dict(row)
+        base_stats_cache = {}
+        for row in db.execute("SELECT digimon_id, hp, sp, atk, def_, int_, spi, spd FROM stats_base"):
+            base_stats_cache[row["digimon_id"]] = [row["hp"], row["sp"], row["atk"],
+                                                     row["def_"], row["int_"],
+                                                     row["spi"], row["spd"]]
+
         for offset in range(8, len(d) - 0x150, 4):
             db_id = struct.unpack('<I', d[offset - 4:offset])[0]
-            info = get_digimon_info(db_id)
+            info = id_to_info.get(db_id)
             if not info:
                 continue
 
@@ -204,7 +215,7 @@ class SaveFile:
             white = [struct.unpack('<i', d[offset + 0x74 + i * 4:offset + 0x78 + i * 4])[0] for i in range(7)]
             farm = [struct.unpack('<i', d[offset + 0x90 + i * 4:offset + 0x94 + i * 4])[0] // 10 for i in range(7)]
             blue = [struct.unpack('<i', d[offset + 0xAC + i * 4:offset + 0xB0 + i * 4])[0] for i in range(7)]
-            base = get_base_stats(db_id)
+            base = base_stats_cache.get(db_id, [0] * 7)
             total = [base[i] + white[i] + farm[i] + blue[i] for i in range(7)]
 
             # Additional fields
@@ -241,7 +252,7 @@ class SaveFile:
             for x in (0x108, 0x10C, 0x110, 0x114, 0x118):
                 prev_id = struct.unpack('<I', d[offset + x:offset + x + 4])[0]
                 if prev_id > 0:
-                    prev_info = get_digimon_info(prev_id)
+                    prev_info = id_to_info.get(prev_id)
                     if prev_info:
                         evo_history.append(prev_info["name"])
                     else:
