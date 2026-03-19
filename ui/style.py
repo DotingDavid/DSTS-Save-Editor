@@ -196,17 +196,44 @@ QScrollArea {{
     background-color: transparent;
 }}
 QScrollBar:vertical {{
-    background-color: {BG_PANEL};
-    width: 8px;
+    background: transparent;
+    width: 4px;
     border: none;
+    margin: 2px 0;
 }}
 QScrollBar::handle:vertical {{
-    background-color: {BORDER_BRIGHT};
-    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
     min-height: 30px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background-color: rgba(255, 255, 255, 0.15);
 }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     height: 0px;
+}}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+    background: transparent;
+}}
+QScrollBar:horizontal {{
+    background: transparent;
+    height: 4px;
+    border: none;
+    margin: 0 2px;
+}}
+QScrollBar::handle:horizontal {{
+    background-color: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
+    min-width: 30px;
+}}
+QScrollBar::handle:horizontal:hover {{
+    background-color: rgba(255, 255, 255, 0.15);
+}}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+    width: 0px;
+}}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+    background: transparent;
 }}
 
 QPushButton {{
