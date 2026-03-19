@@ -1,39 +1,58 @@
-"""Left navigation panel — save slot selector + view navigation + summary stats."""
+"""Left navigation panel — clean sidebar with slot selector, navigation, tools, summary."""
 
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QPushButton,
-                              QFrame, QHBoxLayout, QSizePolicy)
+import os
+from datetime import datetime
+
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                              QPushButton, QFrame, QComboBox, QSizePolicy,
+                              QFileDialog)
 from PyQt6.QtCore import pyqtSignal, Qt
 
-from ui.style import (ACCENT, ACCENT_DIM, ACCENT_BRIGHT, TEXT_PRIMARY,
-                       TEXT_SECONDARY, TEXT_VALUE, BG_PANEL, BG_INPUT,
-                       BG_HOVER, BORDER, STAT_FARM, STAT_BLUE,
-                       PERS_COLORS, DIRTY_COLOR, CLEAN_COLOR)
-from ui.slot_selector import SlotSelector
+from ui.style import (ACCENT, ACCENT_DIM, TEXT_PRIMARY, TEXT_SECONDARY,
+                       TEXT_VALUE, BG_PANEL, BG_INPUT, BG_HOVER, BORDER,
+                       STAT_FARM, STAT_BLUE)
+from save_data import find_save_directory, list_save_slots
 
 
-class NavButton(QPushButton):
-    """Navigation button with active state styling."""
+# ── Shared styled helpers ──
 
-    def __init__(self, text, icon_char="", parent=None):
-        super().__init__(f"  {icon_char}  {text}" if icon_char else f"  {text}", parent)
+def _section_header(text):
+    lbl = QLabel(text)
+    lbl.setStyleSheet(
+        f"color: rgba(0,191,255,0.5); font-size: 9px; font-weight: bold; "
+        f"letter-spacing: 3px; padding: 10px 0 3px 14px; background: transparent;")
+    return lbl
+
+
+def _separator():
+    sep = QFrame()
+    sep.setFixedHeight(1)
+    sep.setStyleSheet(f"background-color: {BORDER}; border: none; margin: 2px 10px;")
+    return sep
+
+
+class _NavButton(QPushButton):
+    """Slim navigation button with active highlight."""
+
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
         self.setCheckable(True)
-        self.setFixedHeight(36)
+        self.setFixedHeight(32)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self._update_style()
-        self.toggled.connect(lambda: self._update_style())
+        self._apply_style()
+        self.toggled.connect(lambda: self._apply_style())
 
-    def _update_style(self):
+    def _apply_style(self):
         if self.isChecked():
             self.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {BG_INPUT};
+                    background-color: rgba(0, 191, 255, 0.08);
                     color: {ACCENT};
                     border: none;
-                    border-left: 3px solid {ACCENT};
-                    border-radius: 0px;
+                    border-left: 2px solid {ACCENT};
                     text-align: left;
-                    padding-left: 12px;
+                    padding-left: 14px;
                     font-weight: bold;
                     font-size: 12px;
                 }}
@@ -44,54 +63,121 @@ class NavButton(QPushButton):
                     background: transparent;
                     color: {TEXT_SECONDARY};
                     border: none;
-                    border-left: 3px solid transparent;
-                    border-radius: 0px;
+                    border-left: 2px solid transparent;
                     text-align: left;
-                    padding-left: 12px;
+                    padding-left: 14px;
                     font-size: 12px;
                 }}
                 QPushButton:hover {{
-                    background-color: {BG_HOVER};
+                    background-color: rgba(255,255,255,0.03);
                     color: {TEXT_PRIMARY};
                 }}
             """)
 
 
-class NavPanel(QWidget):
-    """Left panel with save slot selector, navigation, and summary."""
+class _ToolButton(QPushButton):
+    """Slim tool button."""
 
-    view_requested = pyqtSignal(str)  # emits view name
-    file_selected = pyqtSignal(str)   # emits file path
-    batch_requested = pyqtSignal()    # emits when batch ops button clicked
-    backup_requested = pyqtSignal()   # emits when backup manager clicked
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self.setFixedHeight(28)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {TEXT_SECONDARY};
+                border: none;
+                text-align: left;
+                padding-left: 16px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(255,255,255,0.03);
+                color: {TEXT_PRIMARY};
+            }}
+        """)
+
+
+class NavPanel(QWidget):
+    """Clean left sidebar with save slot, navigation, tools, and summary."""
+
+    view_requested = pyqtSignal(str)
+    file_selected = pyqtSignal(str)
+    batch_requested = pyqtSignal()
+    backup_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._buttons = {}
+        self._save_dir = find_save_directory()
         self._build_ui()
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, 8, 0, 0)
         layout.setSpacing(0)
 
-        # ── Save Slot Selector ──
-        self._slot_selector = SlotSelector()
-        self._slot_selector.file_selected.connect(self.file_selected.emit)
-        layout.addWidget(self._slot_selector)
+        # ── Save Slot (compact) ──
+        slot_section = QWidget()
+        slot_section.setStyleSheet("background: transparent;")
+        slot_layout = QVBoxLayout(slot_section)
+        slot_layout.setContentsMargins(10, 0, 10, 6)
+        slot_layout.setSpacing(4)
 
-        # Separator
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"color: {BORDER};")
-        layout.addWidget(sep)
+        self._combo = QComboBox()
+        self._combo.setMaxVisibleItems(16)
+        self._combo.setFixedHeight(28)
+        self._populate_slots()
+        slot_layout.addWidget(self._combo)
 
-        # ── Navigation Section ──
-        nav_header = QLabel("  VIEWS")
-        nav_header.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 10px; font-weight: bold; "
-            f"padding: 8px 0 4px 8px; letter-spacing: 2px;")
-        layout.addWidget(nav_header)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(4)
+
+        load_btn = QPushButton("Load")
+        load_btn.setFixedHeight(26)
+        load_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: rgba(0, 191, 255, 0.12);
+                color: {ACCENT};
+                border: 1px solid rgba(0, 191, 255, 0.3);
+                border-radius: 3px;
+                font-size: 11px;
+                font-weight: bold;
+                padding: 0 12px;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(0, 191, 255, 0.2);
+                border-color: {ACCENT};
+            }}
+        """)
+        load_btn.clicked.connect(self._on_load)
+        btn_row.addWidget(load_btn)
+
+        open_btn = QPushButton("Open File...")
+        open_btn.setFixedHeight(26)
+        open_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {TEXT_SECONDARY};
+                border: 1px solid {BORDER};
+                border-radius: 3px;
+                font-size: 10px;
+                padding: 0 8px;
+            }}
+            QPushButton:hover {{
+                color: {TEXT_PRIMARY};
+                border-color: rgba(255,255,255,0.2);
+            }}
+        """)
+        open_btn.clicked.connect(self._on_open_file)
+        btn_row.addWidget(open_btn)
+        slot_layout.addLayout(btn_row)
+
+        layout.addWidget(slot_section)
+        layout.addWidget(_separator())
+
+        # ── Views ──
+        layout.addWidget(_section_header("VIEWS"))
 
         nav_items = [
             ("grid", "Roster Grid"),
@@ -100,126 +186,109 @@ class NavPanel(QWidget):
             ("agent", "Agent / Player"),
         ]
         for key, label in nav_items:
-            btn = NavButton(label)
+            btn = _NavButton(label)
             btn.clicked.connect(lambda checked, k=key: self._on_nav_clicked(k))
             self._buttons[key] = btn
             layout.addWidget(btn)
 
-        # Separator
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet(f"color: {BORDER};")
-        layout.addWidget(sep2)
+        layout.addWidget(_separator())
 
-        # ── Tools Section ──
-        tools_header = QLabel("  TOOLS")
-        tools_header.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 10px; font-weight: bold; "
-            f"padding: 8px 0 4px 8px; letter-spacing: 2px;")
-        layout.addWidget(tools_header)
+        # ── Tools ──
+        layout.addWidget(_section_header("TOOLS"))
 
-        self._batch_btn = QPushButton("  Batch Operations...")
-        self._batch_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                color: {TEXT_SECONDARY};
-                border: none;
-                text-align: left;
-                padding: 6px 12px;
-                font-size: 12px;
-            }}
-            QPushButton:hover {{
-                background-color: {BG_HOVER};
-                color: {TEXT_PRIMARY};
-            }}
-        """)
-        self._batch_btn.clicked.connect(self.batch_requested.emit)
-        layout.addWidget(self._batch_btn)
+        batch_btn = _ToolButton("Batch Operations...")
+        batch_btn.clicked.connect(self.batch_requested.emit)
+        layout.addWidget(batch_btn)
 
-        self._backup_btn = QPushButton("  Backup Manager...")
-        self._backup_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                color: {TEXT_SECONDARY};
-                border: none;
-                text-align: left;
-                padding: 6px 12px;
-                font-size: 12px;
-            }}
-            QPushButton:hover {{
-                background-color: {BG_HOVER};
-                color: {TEXT_PRIMARY};
-            }}
-        """)
-        self._backup_btn.clicked.connect(self.backup_requested.emit)
-        layout.addWidget(self._backup_btn)
+        backup_btn = _ToolButton("Backup Manager...")
+        backup_btn.clicked.connect(self.backup_requested.emit)
+        layout.addWidget(backup_btn)
 
-        # Separator
-        sep3 = QFrame()
-        sep3.setFrameShape(QFrame.Shape.HLine)
-        sep3.setStyleSheet(f"color: {BORDER};")
-        layout.addWidget(sep3)
+        layout.addWidget(_separator())
 
-        # ── Summary Stats ──
-        summary_header = QLabel("  SUMMARY")
-        summary_header.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 10px; font-weight: bold; "
-            f"padding: 8px 0 4px 8px; letter-spacing: 2px;")
-        layout.addWidget(summary_header)
+        # ── Summary ──
+        layout.addWidget(_section_header("SUMMARY"))
 
-        self._summary_container = QWidget()
-        summary_layout = QVBoxLayout(self._summary_container)
-        summary_layout.setContentsMargins(12, 4, 12, 4)
-        summary_layout.setSpacing(3)
+        summary = QWidget()
+        summary.setStyleSheet("background: transparent;")
+        s_layout = QVBoxLayout(summary)
+        s_layout.setContentsMargins(14, 2, 14, 4)
+        s_layout.setSpacing(1)
 
         self._stat_labels = {}
         stats = [
-            ("total", "Total Digimon"),
-            ("party", "Party"),
-            ("box", "Box"),
-            ("farm", "Farm"),
-            ("scanned", "Scanned"),
-            ("scan_100", "Scan 100%+"),
+            ("total", "Digimon", TEXT_VALUE),
+            ("party", "Party", ACCENT),
+            ("box", "Box", ACCENT_DIM),
+            ("farm", "Farm", STAT_FARM),
+            ("scanned", "Scanned", TEXT_SECONDARY),
+            ("scan_100", "100%+", STAT_BLUE),
         ]
-        for key, label in stats:
+        for key, label, val_color in stats:
             row = QHBoxLayout()
-            row.setSpacing(4)
+            row.setSpacing(0)
             name_lbl = QLabel(label)
-            name_lbl.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
+            name_lbl.setStyleSheet(
+                f"color: {TEXT_SECONDARY}; font-size: 10px; background: transparent;")
             row.addWidget(name_lbl)
             row.addStretch()
             val_lbl = QLabel("—")
-            val_lbl.setStyleSheet(f"color: {TEXT_VALUE}; font-size: 11px; font-weight: bold;")
+            val_lbl.setStyleSheet(
+                f"color: {val_color}; font-size: 10px; font-weight: bold; "
+                f"background: transparent;")
             self._stat_labels[key] = val_lbl
             row.addWidget(val_lbl)
-            summary_layout.addLayout(row)
+            s_layout.addLayout(row)
 
-        layout.addWidget(self._summary_container)
+        layout.addWidget(summary)
         layout.addStretch()
 
-        # ── App info at bottom ──
-        info = QLabel("ANAMNESIS Save Editor v0.2.0")
-        info.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 9px; padding: 8px;")
-        info.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(info)
+        # ── Version footer ──
+        ver = QLabel("ANAMNESIS Save Editor v0.2.0")
+        ver.setStyleSheet(
+            f"color: rgba(136,136,170,0.4); font-size: 8px; "
+            f"background: transparent; padding: 6px;")
+        ver.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(ver)
 
-        # Default selection
+        # Default
         self._buttons["grid"].setChecked(True)
 
+    def _populate_slots(self):
+        self._combo.clear()
+        if not self._save_dir:
+            self._combo.addItem("No saves found")
+            return
+        slots = list_save_slots(self._save_dir)
+        for slot_num, path, mtime in slots:
+            dt = datetime.fromtimestamp(mtime).strftime("%b %d, %H:%M")
+            self._combo.addItem(f"Slot {slot_num:04d}  —  {dt}", path)
+
+    def _on_load(self):
+        idx = self._combo.currentIndex()
+        if idx >= 0:
+            path = self._combo.itemData(idx)
+            if path and os.path.isfile(path):
+                self.file_selected.emit(path)
+
+    def _on_open_file(self):
+        start_dir = self._save_dir or ""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open Save File", start_dir,
+            "Save Files (*.bin);;All Files (*)")
+        if path:
+            self.file_selected.emit(path)
+
     def _on_nav_clicked(self, key):
-        # Uncheck all others
         for k, btn in self._buttons.items():
             btn.setChecked(k == key)
         self.view_requested.emit(key)
 
     def set_active_view(self, key):
-        """Programmatically set the active navigation button."""
         for k, btn in self._buttons.items():
             btn.setChecked(k == key)
 
     def update_summary(self, roster, scan_count=0, scan_100=0):
-        """Update summary stats from roster data."""
         if not roster:
             for lbl in self._stat_labels.values():
                 lbl.setText("—")
