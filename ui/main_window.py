@@ -25,7 +25,7 @@ from ui.roster_grid import RosterGrid
 from ui.scan_editor import ScanEditor
 from ui.agent_editor import AgentEditor
 from ui.batch_ops import BatchOpsDialog
-from ui.backup_manager import BackupManager
+from ui.backup_manager import SaveFileManager
 from ui.toast import show_toast
 from ui.pixel_bg import PixelDissolveBG
 
@@ -340,12 +340,9 @@ class MainWindow(QMainWindow):
     # ── Tools ──
 
     def _on_backup_manager(self):
-        if not self._save_file:
-            show_toast(self, "Load a save file first", "warning")
-            return
-        dlg = BackupManager(self._save_file.path, self)
+        dlg = SaveFileManager(self)
         dlg.exec()
-        if dlg.restored:
+        if dlg.restored and self._save_file:
             self._load_file(self._save_file.path)
 
     def _on_batch_ops(self):
