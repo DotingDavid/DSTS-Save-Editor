@@ -10,11 +10,12 @@ import logging
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
                               QToolBar, QStatusBar, QLabel, QStackedWidget,
                               QMessageBox, QFileDialog, QPushButton, QSizePolicy)
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
 
-from save_data import SaveFile
+from save_data import SaveFile, is_game_running
 from save_layout import SCAN_TABLE_OFFSET, SCAN_TABLE_STRIDE
+from app_paths import get_app_icon_path
 from ui.style import (GLOBAL_STYLESHEET, BG_PANEL, BG_INPUT, BG_HEADER,
                        BORDER, ACCENT, TEXT_SECONDARY, TEXT_DISABLED,
                        DIRTY_COLOR, CLEAN_COLOR)
@@ -27,6 +28,15 @@ from ui.batch_ops import BatchOpsDialog
 from ui.backup_manager import BackupManager
 
 logger = logging.getLogger(__name__)
+
+
+class ProcessChecker(QThread):
+    """Background thread to check if the game is running."""
+    result = pyqtSignal(bool)
+
+    def run(self):
+        self.result.emit(is_game_running())
+
 
 STAT_KEY_TO_INDEX = {"hp": 0, "sp": 1, "atk": 2, "def": 3, "int": 4, "spi": 5, "spd": 6}
 
@@ -44,8 +54,7 @@ class MainWindow(QMainWindow):
         self.resize(1280, 800)
         self.setMinimumSize(1024, 700)
 
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                  'data', 'app_icon.ico')
+        icon_path = get_app_icon_path()
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
@@ -53,6 +62,12 @@ class MainWindow(QMainWindow):
         self._build_toolbar()
         self._build_panels()
         self._build_statusbar()
+
+        # Game process detection timer
+        self._game_running = False
+        self._process_timer = QTimer()
+        self._process_timer.timeout.connect(self._check_game_process)
+        self._process_timer.start(5000)
 
     # ── Toolbar ──
 
@@ -178,10 +193,15 @@ class MainWindow(QMainWindow):
         self._editor = DigimonEditor()
         self._editor.field_changed.connect(self._on_field_changed)
         self._editor.back_requested.connect(lambda: self._switch_view("grid"))
+        self._editor.export_requested.connect(
+            lambda: self._on_export(self._current_entry) if self._current_entry else None)
+        self._editor.import_requested.connect(self._on_import)
         self._stack.addWidget(self._editor)  # 0: digimon
 
         self._grid = RosterGrid()
         self._grid.digimon_selected.connect(self._on_grid_selected)
+        self._grid.clone_requested.connect(self._on_clone)
+        self._grid.export_requested.connect(self._on_export)
         self._stack.addWidget(self._grid)  # 1: grid
 
         self._scan_editor = ScanEditor()
@@ -200,6 +220,12 @@ class MainWindow(QMainWindow):
 
         self._status_file = QLabel("No file loaded")
         sb.addWidget(self._status_file, 1)
+
+        self._game_warning = QLabel("")
+        self._game_warning.setStyleSheet(
+            "color: #EF5350; font-weight: bold; font-size: 11px;")
+        self._game_warning.hide()
+        sb.addPermanentWidget(self._game_warning)
 
         self._status_dirty = QLabel("")
         self._status_dirty.setStyleSheet(f"color: {CLEAN_COLOR}; font-weight: bold;")
@@ -321,6 +347,91 @@ class MainWindow(QMainWindow):
         if dlg.changes_made:
             self._update_dirty_indicator()
 
+    # ── Clone / Export / Import ──
+
+    def _on_clone(self, entry):
+        if not self._save_file:
+            return
+        name = entry.get("nickname") or entry["species"]
+        reply = QMessageBox.question(
+            self, "Clone Digimon",
+            f"Clone {name} (Lv{entry['level']})?\n\n"
+            "The clone will be placed in the box with a new creation hash.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            new_off = self._save_file.clone_digimon(entry["_offset"])
+            self._roster = self._save_file.read_roster()
+            self._grid.set_roster(self._roster)
+            self._update_dirty_indicator()
+            self.statusBar().showMessage(f"Cloned {name} to box", 5000)
+        except Exception as e:
+            QMessageBox.critical(self, "Clone Error", str(e))
+
+    def _on_export(self, entry):
+        if not self._save_file or not entry:
+            return
+        try:
+            import json
+            data = self._save_file.export_digimon(entry["_offset"])
+            name = entry.get("nickname") or entry["species"]
+            default_name = f"{name}_Lv{entry['level']}.digi"
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Export Digimon", default_name,
+                "Digimon Files (*.digi);;All Files (*)")
+            if path:
+                with open(path, 'w') as f:
+                    json.dump(data, f, indent=2)
+                self.statusBar().showMessage(f"Exported {name} to {path}", 5000)
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", str(e))
+
+    def _on_import(self):
+        if not self._save_file:
+            QMessageBox.information(self, "No Data", "Load a save file first.")
+            return
+        try:
+            import json
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Import Digimon", "",
+                "Digimon Files (*.digi);;All Files (*)")
+            if not path:
+                return
+            with open(path, 'r') as f:
+                data = json.load(f)
+            species = data.get("species", "Unknown")
+            reply = QMessageBox.question(
+                self, "Import Digimon",
+                f"Import {species} (Lv{data.get('level', '?')})?\n\n"
+                "It will be placed in the box with a new creation hash.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            self._save_file.import_digimon(data)
+            self._roster = self._save_file.read_roster()
+            self._grid.set_roster(self._roster)
+            self._update_dirty_indicator()
+            self.statusBar().showMessage(f"Imported {species}", 5000)
+        except Exception as e:
+            QMessageBox.critical(self, "Import Error", str(e))
+
+    # ── Game process detection ──
+
+    def _check_game_process(self):
+        checker = ProcessChecker()
+        checker.result.connect(self._on_process_check)
+        checker.start()
+        self._checker = checker  # prevent GC
+
+    def _on_process_check(self, running):
+        self._game_running = running
+        if running:
+            self._game_warning.setText("GAME RUNNING")
+            self._game_warning.show()
+        else:
+            self._game_warning.hide()
+
     # ── Selection ──
 
     def _on_grid_selected(self, entry):
@@ -368,6 +479,17 @@ class MainWindow(QMainWindow):
             self._save_file.write_cur_hp(offset, value)
         elif field == "cur_sp":
             self._save_file.write_cur_sp(offset, value)
+        elif field == "species_change":
+            self._save_file.change_species(offset, value)
+            # Reload roster and refresh
+            self._roster = self._save_file.read_roster()
+            self._grid.set_roster(self._roster)
+            # Find and re-select the changed entry
+            for e in self._roster:
+                if e["_offset"] == offset:
+                    self._current_entry = e
+                    self._editor.set_entry(e)
+                    break
         elif field.startswith("attach_skill_"):
             slot = int(field.split("_")[-1])
             self._save_file.write_attach_skill(offset, slot, value)

@@ -6,7 +6,7 @@ evo counter, EXP, HP, SP, nickname, evo history.
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
                               QLabel, QSpinBox, QComboBox, QSlider, QFrame,
-                              QLineEdit, QGroupBox)
+                              QLineEdit, QGroupBox, QPushButton)
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.style import (ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
@@ -57,6 +57,25 @@ class IdentityEditor(QWidget):
         self._attr_label = QLabel("")
         self._attr_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
         info_col.addWidget(self._attr_label)
+
+        self._change_species_btn = QPushButton("Change Species...")
+        self._change_species_btn.setFixedWidth(130)
+        self._change_species_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {BG_INPUT};
+                color: {TEXT_SECONDARY};
+                border: 1px solid {BORDER};
+                border-radius: 3px;
+                padding: 3px 8px;
+                font-size: 10px;
+            }}
+            QPushButton:hover {{
+                color: {ACCENT};
+                border-color: {ACCENT};
+            }}
+        """)
+        self._change_species_btn.clicked.connect(self._on_change_species)
+        info_col.addWidget(self._change_species_btn)
 
         info_col.addStretch()
         header.addLayout(info_col)
@@ -282,3 +301,11 @@ class IdentityEditor(QWidget):
         new_name = self._nick_edit.text().strip()
         if new_name and new_name != self._entry.get("display_name", ""):
             self.field_changed.emit("nickname", new_name)
+
+    def _on_change_species(self):
+        if not self._entry:
+            return
+        from ui.species_chooser import SpeciesChooserDialog
+        dlg = SpeciesChooserDialog(self._entry["species"], self)
+        if dlg.exec() and dlg.selected_id:
+            self.field_changed.emit("species_change", dlg.selected_id)

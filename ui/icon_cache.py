@@ -7,7 +7,9 @@ import os
 from PyQt6.QtGui import QPixmap, QPixmapCache
 from PyQt6.QtCore import QSize, Qt
 
-_ICON_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'icons')
+from app_paths import get_icon_dir
+
+_ICON_DIR = get_icon_dir()
 
 # Increase cache limit for 475 icons at multiple sizes
 QPixmapCache.setCacheLimit(200 * 1024)  # 200MB

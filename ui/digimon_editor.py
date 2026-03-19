@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                               QTabWidget, QLabel, QPushButton)
 from PyQt6.QtCore import pyqtSignal, Qt
 
-from ui.style import TEXT_SECONDARY
+from ui.style import TEXT_SECONDARY, BORDER
 from ui.identity_editor import IdentityEditor
 from ui.stat_editor import StatEditor
 from ui.skills_editor import SkillsEditor
@@ -17,7 +17,9 @@ class DigimonEditor(QWidget):
     """Right panel: tabbed editor for one Digimon."""
 
     field_changed = pyqtSignal(str, object)  # field_name, new_value
-    back_requested = pyqtSignal()  # emitted when user clicks back to grid
+    back_requested = pyqtSignal()
+    export_requested = pyqtSignal()
+    import_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -47,6 +49,25 @@ class DigimonEditor(QWidget):
             }}
         """)
         header.addWidget(self._back_btn)
+        header.addStretch()
+
+        self._export_btn = QPushButton("Export")
+        self._export_btn.clicked.connect(self.export_requested.emit)
+        self._export_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {TEXT_SECONDARY};
+                border: 1px solid {BORDER}; border-radius: 3px;
+                padding: 3px 10px; font-size: 10px;
+            }}
+            QPushButton:hover {{ color: #00BFFF; border-color: #00BFFF; }}
+        """)
+        header.addWidget(self._export_btn)
+
+        self._import_btn = QPushButton("Import")
+        self._import_btn.clicked.connect(self.import_requested.emit)
+        self._import_btn.setStyleSheet(self._export_btn.styleSheet())
+        header.addWidget(self._import_btn)
+
         self._header_name = QLabel("")
         self._header_name.setStyleSheet(
             "color: #E8E8F0; font-size: 13px; font-weight: bold;")

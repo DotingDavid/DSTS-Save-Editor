@@ -5,9 +5,9 @@ Displays Digimon as a grid of clickable icons, grouped by Party/Box/Farm.
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
                               QLabel, QGridLayout, QSizePolicy, QLineEdit,
-                              QComboBox)
+                              QComboBox, QMenu)
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
-from PyQt6.QtGui import QCursor, QPixmap
+from PyQt6.QtGui import QCursor, QPixmap, QAction
 
 from ui.style import (BG_PANEL, BG_INPUT, BG_HOVER, BG_SELECTED,
                        ACCENT, ACCENT_DIM, STAT_FARM, TEXT_PRIMARY,
@@ -24,6 +24,8 @@ class GridSlot(QWidget):
     """Single Digimon slot in the grid."""
 
     clicked = pyqtSignal(dict)
+    clone_requested = pyqtSignal(dict)
+    export_requested = pyqtSignal(dict)
 
     def __init__(self, entry=None, parent=None):
         super().__init__(parent)
@@ -89,6 +91,18 @@ class GridSlot(QWidget):
             self.clicked.emit(self._entry)
         super().mousePressEvent(event)
 
+    def contextMenuEvent(self, event):
+        if not self._entry:
+            return
+        menu = QMenu(self)
+        clone_act = menu.addAction("Clone Digimon")
+        export_act = menu.addAction("Export to File...")
+        action = menu.exec(event.globalPos())
+        if action == clone_act:
+            self.clone_requested.emit(self._entry)
+        elif action == export_act:
+            self.export_requested.emit(self._entry)
+
     def enterEvent(self, event):
         if self._entry and not self._selected:
             self.setStyleSheet(
@@ -105,6 +119,8 @@ class RosterGrid(QWidget):
     """Scrollable grid of Digimon icons grouped by Party/Box/Farm."""
 
     digimon_selected = pyqtSignal(dict)
+    clone_requested = pyqtSignal(dict)
+    export_requested = pyqtSignal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -205,6 +221,8 @@ class RosterGrid(QWidget):
                 col = i % GRID_COLS
                 slot = GridSlot(entry)
                 slot.clicked.connect(self._on_slot_clicked)
+                slot.clone_requested.connect(self.clone_requested.emit)
+                slot.export_requested.connect(self.export_requested.emit)
                 grid.addWidget(slot, row, col)
                 self._slots.append(slot)
 

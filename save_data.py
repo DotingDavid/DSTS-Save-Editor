@@ -9,11 +9,16 @@ import os
 import glob
 import shutil
 import struct
+import random
 import sqlite3
+import base64
+import json
+import subprocess
 from datetime import datetime
 
 import save_crypto
 from save_layout import DIGI, REGIONS, AGENT, PERSONALITY_NAMES
+from app_paths import get_db_path
 
 
 # ── Database lookups ────────────────────────────────────────────────
@@ -24,8 +29,7 @@ _db_conn = None
 def _get_db():
     global _db_conn
     if _db_conn is None:
-        db_path = os.path.join(os.path.dirname(__file__), 'data', 'anamnesis.db')
-        _db_conn = sqlite3.connect(db_path)
+        _db_conn = sqlite3.connect(get_db_path())
         _db_conn.row_factory = sqlite3.Row
     return _db_conn
 
@@ -55,6 +59,37 @@ def get_base_stats(db_id):
         (db_id,)
     ).fetchone()
     return list(row) if row else [0] * 7
+
+
+_species_cache = None
+
+def get_all_digimon_species():
+    """Return sorted list of (db_id, name, stage, attribute, type) for all Digimon."""
+    global _species_cache
+    if _species_cache is not None:
+        return _species_cache
+    db = _get_db()
+    _species_cache = []
+    for row in db.execute(
+            "SELECT id, name, stage, attribute, type FROM digimon ORDER BY name"):
+        _species_cache.append(
+            (row["id"], row["name"], row["stage"] or "",
+             row["attribute"] or "", row["type"] or ""))
+    return _species_cache
+
+
+def is_game_running():
+    """Check if the game process is currently running."""
+    try:
+        output = subprocess.check_output(
+            ['tasklist', '/FI', 'IMAGENAME eq Digimon Story Time Stranger.exe',
+             '/NH'],
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+            timeout=3
+        ).decode('ascii', errors='replace')
+        return 'Digimon' in output
+    except Exception:
+        return False
 
 
 def get_item_name(item_id):
@@ -398,6 +433,137 @@ class SaveFile:
         offset = entry_offset + 0x130 + slot_index * 2
         struct.pack_into('<H', self._data, offset, item_id & 0xFFFF)
         self._mark_dirty()
+
+    # ── Species change ──
+
+    def change_species(self, entry_offset, new_db_id):
+        """Change a Digimon's species. Resets white stats, keeps blue/farm/bond."""
+        name = get_digimon_name(new_db_id)
+        # Write db_id at -0x04
+        struct.pack_into('<I', self._data, entry_offset - 4, new_db_id)
+        # Write db_id_copy at +0x104
+        struct.pack_into('<I', self._data, entry_offset + 0x104, new_db_id)
+        # Write new species name
+        self.write_nickname(entry_offset, name)
+        # Zero white stats (growth is species-dependent)
+        for i in range(7):
+            struct.pack_into('<i', self._data, entry_offset + 0x74 + i * 4, 0)
+        # Reset current HP/SP to new base stats
+        base = get_base_stats(new_db_id)
+        struct.pack_into('<i', self._data, entry_offset + 0x6C, base[0])  # HP
+        struct.pack_into('<i', self._data, entry_offset + 0x70, base[1])  # SP
+        self._mark_dirty()
+
+    # ── Clone ──
+
+    def find_empty_slot(self):
+        """Find the first empty slot in the box region. Returns offset or None."""
+        d = self._data
+        # Box empty region: 0x009000-0x053000, stride 0x150
+        for offset in range(0x009004, 0x053000, 0x150):
+            # Check if db_id is 0 and name field is null
+            db_id = struct.unpack('<I', d[offset - 4:offset])[0]
+            if db_id == 0:
+                # Verify name is empty too
+                if d[offset:offset + 4] == b'\x00\x00\x00\x00':
+                    return offset
+        return None
+
+    def clone_digimon(self, source_offset):
+        """Clone a Digimon to an empty box slot. Returns new offset or raises."""
+        dest = self.find_empty_slot()
+        if dest is None:
+            raise RuntimeError("No empty roster slots available")
+
+        # Copy 0x154 bytes (db_id at -4 through +0x14F)
+        src_start = source_offset - 4
+        dst_start = dest - 4
+        length = 0x154
+        self._data[dst_start:dst_start + length] = self._data[src_start:src_start + length]
+
+        # New creation hash
+        new_hash = random.randint(0x1000, 0xFFFFFFFF)
+        struct.pack_into('<I', self._data, dest + 0x148, new_hash)
+
+        # Reset evo counter
+        self._data[dest + 0xC8] = 0
+
+        # Put in box (not party)
+        struct.pack_into('<I', self._data, dest + 0x11C, 0)
+
+        # Set active flag
+        struct.pack_into('<I', self._data, dest + 0x140, 1)
+
+        # Clear next pointer (end of list)
+        struct.pack_into('<I', self._data, dest + 0x14C, 0)
+
+        self._mark_dirty()
+        return dest
+
+    # ── Export/Import ──
+
+    def export_digimon(self, entry_offset):
+        """Export a Digimon as a JSON-serializable dict."""
+        d = self._data
+        raw = d[entry_offset - 4:entry_offset + 0x150]
+        raw_b64 = base64.b64encode(bytes(raw)).decode('ascii')
+
+        db_id = struct.unpack('<I', d[entry_offset - 4:entry_offset])[0]
+        name_end = d.find(b'\x00', entry_offset, entry_offset + 32)
+        display_name = d[entry_offset:name_end].decode('ascii', errors='replace')
+
+        return {
+            "format_version": 1,
+            "editor_version": "0.1.0",
+            "species": get_digimon_name(db_id),
+            "db_id": db_id,
+            "display_name": display_name,
+            "level": struct.unpack('<i', d[entry_offset + 0x60:entry_offset + 0x64])[0],
+            "personality_id": d[entry_offset + 0xEE],
+            "personality": PERSONALITY_NAMES.get(d[entry_offset + 0xEE], "?"),
+            "talent": struct.unpack('<i', d[entry_offset + 0x100:entry_offset + 0x104])[0] // 1000,
+            "evo_fwd_count": d[entry_offset + 0xC8],
+            "raw_hex": raw_b64,
+        }
+
+    def import_digimon(self, digi_data):
+        """Import a Digimon from an exported dict. Returns new offset or raises."""
+        dest = self.find_empty_slot()
+        if dest is None:
+            raise RuntimeError("No empty roster slots available")
+
+        raw = base64.b64decode(digi_data["raw_hex"])
+        if len(raw) != 0x154:
+            raise ValueError(f"Invalid raw data size: {len(raw)} (expected {0x154})")
+
+        # Verify db_id matches
+        raw_db_id = struct.unpack('<I', raw[0:4])[0]
+        if raw_db_id != digi_data.get("db_id"):
+            raise ValueError("db_id mismatch between raw data and metadata")
+
+        # Verify species exists
+        info = get_digimon_info(raw_db_id)
+        if not info:
+            raise ValueError(f"Unknown Digimon ID: {raw_db_id}")
+
+        # Write to empty slot
+        dst_start = dest - 4
+        self._data[dst_start:dst_start + 0x154] = raw
+
+        # New creation hash
+        new_hash = random.randint(0x1000, 0xFFFFFFFF)
+        struct.pack_into('<I', self._data, dest + 0x148, new_hash)
+
+        # Reset evo counter
+        self._data[dest + 0xC8] = 0
+
+        # Box, not party
+        struct.pack_into('<I', self._data, dest + 0x11C, 0)
+        struct.pack_into('<I', self._data, dest + 0x140, 1)
+        struct.pack_into('<I', self._data, dest + 0x14C, 0)
+
+        self._mark_dirty()
+        return dest
 
     # ── Save to disk ──
 
