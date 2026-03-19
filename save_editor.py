@@ -1,4 +1,4 @@
-"""DSTS Save Editor — Digimon Story: Time Stranger Save File Editor.
+"""ANAMNESIS Save Editor — Digimon Story: Time Stranger Save File Editor.
 
 Main application entry point. PyQt6-based GUI for viewing and editing
 save files from Digimon Story: Time Stranger.
@@ -18,7 +18,7 @@ def main():
 
     from PyQt6.QtWidgets import QApplication
     app = QApplication(sys.argv)
-    app.setApplicationName("DSTS Save Editor")
+    app.setApplicationName("ANAMNESIS Save Editor")
 
     from ui.main_window import MainWindow
     window = MainWindow()

@@ -198,7 +198,7 @@ class NavPanel(QWidget):
         layout.addStretch()
 
         # ── App info at bottom ──
-        info = QLabel("DSTS Save Editor v0.1.0")
+        info = QLabel("ANAMNESIS Save Editor v0.2.0")
         info.setStyleSheet(
             f"color: {TEXT_SECONDARY}; font-size: 9px; padding: 8px;")
         info.setAlignment(Qt.AlignmentFlag.AlignCenter)

@@ -1,4 +1,4 @@
-"""Main application window for the DSTS Save Editor.
+"""Main application window for the ANAMNESIS Save Editor.
 
 Left nav panel + center content area (stacked views).
 """
@@ -26,6 +26,7 @@ from ui.scan_editor import ScanEditor
 from ui.agent_editor import AgentEditor
 from ui.batch_ops import BatchOpsDialog
 from ui.backup_manager import BackupManager
+from ui.toast import show_toast
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class MainWindow(QMainWindow):
         self._roster = []
         self._current_entry = None
 
-        self.setWindowTitle("DSTS Save Editor")
+        self.setWindowTitle("ANAMNESIS Save Editor")
         self.resize(1280, 800)
         self.setMinimumSize(1024, 700)
 
@@ -124,7 +125,7 @@ class MainWindow(QMainWindow):
         tb.addWidget(spacer)
 
         # Version
-        ver = QLabel("  DSTS Save Editor v0.1.0  ")
+        ver = QLabel("  ANAMNESIS Save Editor v0.2.0  ")
         ver.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
         tb.addWidget(ver)
 
@@ -282,6 +283,7 @@ class MainWindow(QMainWindow):
             self._act_save_as.setEnabled(True)
             self._switch_view("grid")
 
+            show_toast(self, f"Loaded {len(self._roster)} Digimon from {basename}", "info")
             logger.info("Loaded %s: %d Digimon", basename, len(self._roster))
         except Exception as e:
             QMessageBox.critical(self, "Load Error", f"Failed to load save file:\n{e}")
@@ -302,7 +304,7 @@ class MainWindow(QMainWindow):
         try:
             self._save_file.save(backup=True)
             self._update_dirty_indicator()
-            self.statusBar().showMessage("Saved with backup", 5000)
+            show_toast(self, "Saved with backup", "success")
             logger.info("Saved to %s", self._save_file.path)
         except Exception as e:
             QMessageBox.critical(self, "Save Error", f"Failed to save:\n{e}")
@@ -365,7 +367,7 @@ class MainWindow(QMainWindow):
             self._roster = self._save_file.read_roster()
             self._grid.set_roster(self._roster)
             self._update_dirty_indicator()
-            self.statusBar().showMessage(f"Cloned {name} to box", 5000)
+            show_toast(self, f"Cloned {name} to box", "success")
         except Exception as e:
             QMessageBox.critical(self, "Clone Error", str(e))
 
@@ -383,7 +385,7 @@ class MainWindow(QMainWindow):
             if path:
                 with open(path, 'w') as f:
                     json.dump(data, f, indent=2)
-                self.statusBar().showMessage(f"Exported {name} to {path}", 5000)
+                show_toast(self, f"Exported {name}", "success")
         except Exception as e:
             QMessageBox.critical(self, "Export Error", str(e))
 
@@ -412,7 +414,7 @@ class MainWindow(QMainWindow):
             self._roster = self._save_file.read_roster()
             self._grid.set_roster(self._roster)
             self._update_dirty_indicator()
-            self.statusBar().showMessage(f"Imported {species}", 5000)
+            show_toast(self, f"Imported {species}", "success")
         except Exception as e:
             QMessageBox.critical(self, "Import Error", str(e))
 

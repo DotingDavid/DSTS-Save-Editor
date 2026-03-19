@@ -1,4 +1,4 @@
-"""Global color scheme and stylesheet for the DSTS Save Editor.
+"""Global color scheme and stylesheet for the ANAMNESIS Save Editor.
 
 Dark theme matching the ANAMNESIS overlay aesthetic.
 """

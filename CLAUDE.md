@@ -1,8 +1,9 @@
-# DSTS Save Editor — Digimon Story: Time Stranger
+# ANAMNESIS Save Editor — Digimon Story: Time Stranger
 
 ## Project Overview
 Standalone PyQt6 save file editor for Digimon Story: Time Stranger.
 First save editor for this game — no other tool exists.
+**Branded as ANAMNESIS Save Editor** — shares name/aesthetic with the ANAMNESIS Companion App but is a separate standalone tool.
 
 - **Location:** `C:\Users\apham\DigimonSaveEditor\`
 - **Repo:** TBD (will be created on GitHub)
