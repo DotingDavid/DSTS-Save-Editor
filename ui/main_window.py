@@ -188,7 +188,7 @@ class MainWindow(QMainWindow):
             self._status_file.setText(f"File: {basename}")
             self._status_count.setText(f"{len(self._roster)} Digimon")
             self._update_dirty_indicator()
-            self._act_save.setEnabled(True)
+            self._save_btn.setEnabled(True)
             self._act_save_as.setEnabled(True)
 
             logger.info("Loaded %s: %d Digimon", basename, len(self._roster))
