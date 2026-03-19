@@ -3,9 +3,11 @@
 Contains tabs: Identity, Stats, Skills & Equipment.
 """
 
+import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                               QTabWidget, QLabel, QPushButton)
 from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtGui import QPixmap
 
 from ui.style import TEXT_SECONDARY, BORDER
 from ui.identity_editor import IdentityEditor
@@ -79,16 +81,74 @@ class DigimonEditor(QWidget):
         self._header_widget.hide()
         layout.addWidget(self._header_widget)
 
-        # Placeholder shown when no Digimon is selected
-        self._placeholder = QLabel(
-            "ANAMNESIS\nSave Editor\n\n"
-            "Select a save slot and click Load,\n"
-            "then pick a Digimon from the grid to edit.")
-        self._placeholder.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 16px; padding: 60px;"
-            f" background: transparent;")
-        self._placeholder.setWordWrap(True)
-        self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Welcome screen shown when no Digimon is selected
+        self._placeholder = QWidget()
+        self._placeholder.setStyleSheet("background: transparent;")
+        ph_layout = QVBoxLayout(self._placeholder)
+        ph_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ph_layout.setSpacing(4)
+
+        ph_layout.addStretch(2)
+
+        # Logo image
+        from app_paths import get_data_dir
+        logo_path = os.path.join(get_data_dir(), 'anamnesis_logo.png')
+        if os.path.exists(logo_path):
+            logo_label = QLabel()
+            logo_pm = QPixmap(logo_path)
+            if not logo_pm.isNull():
+                from PyQt6.QtCore import QSize
+                logo_pm = logo_pm.scaled(
+                    QSize(500, 120),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation)
+                logo_label.setPixmap(logo_pm)
+            logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            logo_label.setStyleSheet("background: transparent;")
+            ph_layout.addWidget(logo_label)
+
+        # Cyan line
+        line = QLabel()
+        line.setFixedHeight(2)
+        line.setStyleSheet(
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+            "stop:0 transparent, stop:0.2 #00BFFF, stop:0.8 #00BFFF, "
+            "stop:1 transparent); border: none; margin: 0 60px;")
+        ph_layout.addWidget(line)
+
+        # Subtitle
+        sub = QLabel("SAVE EDITOR  ·  DIGIMON STORY TIME STRANGER")
+        sub.setStyleSheet(
+            "color: rgba(0, 191, 255, 0.5); font-size: 13px; "
+            "font-weight: bold; letter-spacing: 3px; background: transparent;")
+        sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ph_layout.addWidget(sub)
+
+        # Tagline
+        tag = QLabel("remember everything")
+        tag.setStyleSheet(
+            "color: #00BFFF; font-size: 14px; font-weight: bold; "
+            "font-style: italic; background: transparent; padding-top: 8px;")
+        tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ph_layout.addWidget(tag)
+
+        # Footer
+        foot = QLabel("DIGITAL  ·  EVOLUTION  ·  PROTOCOL")
+        foot.setStyleSheet(
+            "color: rgba(136, 136, 170, 0.6); font-size: 10px; "
+            "letter-spacing: 4px; background: transparent; padding-top: 16px;")
+        foot.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ph_layout.addWidget(foot)
+
+        # Instructions
+        instr = QLabel("Select a save slot and click Load to get started")
+        instr.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 11px; "
+            "background: transparent; padding-top: 24px;")
+        instr.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ph_layout.addWidget(instr)
+
+        ph_layout.addStretch(3)
 
         # Tabbed editor
         self._tabs = QTabWidget()
