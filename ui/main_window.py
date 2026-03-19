@@ -23,6 +23,7 @@ from ui.digimon_editor import DigimonEditor
 from ui.roster_grid import RosterGrid
 from ui.scan_editor import ScanEditor
 from ui.agent_editor import AgentEditor
+from ui.batch_ops import BatchOpsDialog
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,7 @@ class MainWindow(QMainWindow):
             f"background-color: {BG_PANEL}; border-right: 1px solid {BORDER};")
         self._nav.file_selected.connect(self._load_file)
         self._nav.view_requested.connect(self._switch_view)
+        self._nav.batch_requested.connect(self._on_batch_ops)
         main_layout.addWidget(self._nav)
 
         # Center content (stacked views)
@@ -296,6 +298,17 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self._load_file(self._save_file.path)
+
+    # ── Batch operations ──
+
+    def _on_batch_ops(self):
+        if not self._save_file or not self._roster:
+            QMessageBox.information(self, "No Data", "Load a save file first.")
+            return
+        dlg = BatchOpsDialog(self._save_file, self._roster, self)
+        dlg.exec()
+        if dlg.changes_made:
+            self._update_dirty_indicator()
 
     # ── Selection ──
 

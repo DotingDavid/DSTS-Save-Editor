@@ -62,6 +62,7 @@ class NavPanel(QWidget):
 
     view_requested = pyqtSignal(str)  # emits view name
     file_selected = pyqtSignal(str)   # emits file path
+    batch_requested = pyqtSignal()    # emits when batch ops button clicked
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -108,6 +109,37 @@ class NavPanel(QWidget):
         sep2.setFrameShape(QFrame.Shape.HLine)
         sep2.setStyleSheet(f"color: {BORDER};")
         layout.addWidget(sep2)
+
+        # ── Tools Section ──
+        tools_header = QLabel("  TOOLS")
+        tools_header.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 10px; font-weight: bold; "
+            f"padding: 8px 0 4px 8px; letter-spacing: 2px;")
+        layout.addWidget(tools_header)
+
+        self._batch_btn = QPushButton("  Batch Operations...")
+        self._batch_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {TEXT_SECONDARY};
+                border: none;
+                text-align: left;
+                padding: 6px 12px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {BG_HOVER};
+                color: {TEXT_PRIMARY};
+            }}
+        """)
+        self._batch_btn.clicked.connect(self.batch_requested.emit)
+        layout.addWidget(self._batch_btn)
+
+        # Separator
+        sep3 = QFrame()
+        sep3.setFrameShape(QFrame.Shape.HLine)
+        sep3.setStyleSheet(f"color: {BORDER};")
+        layout.addWidget(sep3)
 
         # ── Summary Stats ──
         summary_header = QLabel("  SUMMARY")
