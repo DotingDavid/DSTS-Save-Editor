@@ -140,11 +140,10 @@ class ScanEditor(QWidget):
         for row, (idx, digi_id, name, pct) in enumerate(self._scan_entries):
             # Icon
             icon_item = QTableWidgetItem()
-            icon_item.setIcon(get_icon(name, 24).toImage()
-                              if False else get_icon(name, 24))
-            # Actually QTableWidgetItem doesn't take QPixmap as icon easily
-            # Just use text for now
-            icon_item.setText("")
+            from PyQt6.QtGui import QIcon
+            pm = get_icon(name, 24)
+            if not pm.isNull():
+                icon_item.setIcon(QIcon(pm))
             icon_item.setFlags(icon_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self._table.setItem(row, 0, icon_item)
 
