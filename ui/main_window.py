@@ -242,6 +242,10 @@ class MainWindow(QMainWindow):
     # ── View switching ──
 
     def _switch_view(self, name):
+        if not self._save_file and name != "digimon":
+            show_toast(self, "Load a save file first", "warning")
+            self._nav.set_active_view("digimon")
+            return
         view_map = {"digimon": 0, "grid": 1, "scan": 2, "agent": 3}
         idx = view_map.get(name, 1)
         self._stack.setCurrentIndex(idx)
@@ -337,7 +341,7 @@ class MainWindow(QMainWindow):
 
     def _on_backup_manager(self):
         if not self._save_file:
-            QMessageBox.information(self, "No Data", "Load a save file first.")
+            show_toast(self, "Load a save file first", "warning")
             return
         dlg = BackupManager(self._save_file.path, self)
         dlg.exec()
@@ -346,7 +350,7 @@ class MainWindow(QMainWindow):
 
     def _on_batch_ops(self):
         if not self._save_file or not self._roster:
-            QMessageBox.information(self, "No Data", "Load a save file first.")
+            show_toast(self, "Load a save file first", "warning")
             return
         dlg = BatchOpsDialog(self._save_file, self._roster, self)
         dlg.exec()
@@ -395,7 +399,7 @@ class MainWindow(QMainWindow):
 
     def _on_import(self):
         if not self._save_file:
-            QMessageBox.information(self, "No Data", "Load a save file first.")
+            show_toast(self, "Load a save file first", "warning")
             return
         try:
             import json

@@ -265,6 +265,19 @@ QGroupBox::title {{
     padding: 0 4px;
 }}
 
+QMessageBox {{
+    background-color: {BG_PANEL};
+    color: {TEXT_PRIMARY};
+}}
+QMessageBox QLabel {{
+    color: {TEXT_PRIMARY};
+    font-size: 12px;
+    min-width: 250px;
+}}
+QMessageBox QPushButton {{
+    min-width: 70px;
+}}
+
 QSplitter::handle {{
     background-color: {BORDER};
     width: 2px;
