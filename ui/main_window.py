@@ -19,6 +19,8 @@ from ui.style import (GLOBAL_STYLESHEET, BG_PANEL, BG_INPUT, BORDER, ACCENT,
 from ui.slot_selector import SlotSelector
 from ui.roster_list import RosterList
 from ui.digimon_editor import DigimonEditor
+from ui.scan_editor import ScanEditor
+from ui.agent_editor import AgentEditor
 
 logger = logging.getLogger(__name__)
 
@@ -115,11 +117,41 @@ class MainWindow(QMainWindow):
         """)
         tb.addWidget(self._discard_btn)
 
+        tb.addSeparator()
+
+        # View switching buttons
+        self._view_btns = {}
+        for name, label in [("digimon", "Digimon"), ("scan", "Scan Table"),
+                             ("agent", "Agent")]:
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    color: {TEXT_SECONDARY};
+                    border: 1px solid transparent;
+                    border-radius: 4px;
+                    padding: 4px 12px;
+                    font-size: 11px;
+                }}
+                QPushButton:hover {{
+                    background-color: {BG_INPUT};
+                    color: {ACCENT};
+                }}
+                QPushButton:checked {{
+                    background-color: {BG_INPUT};
+                    color: {ACCENT};
+                    border-color: {ACCENT};
+                    font-weight: bold;
+                }}
+            """)
+            btn.clicked.connect(lambda checked, n=name: self._switch_view(n))
+            self._view_btns[name] = btn
+            tb.addWidget(btn)
+        self._view_btns["digimon"].setChecked(True)
+
         # Stretch spacer
         spacer = QWidget()
-        spacer.setSizePolicy(spacer.sizePolicy().horizontalPolicy(),
-                             spacer.sizePolicy().verticalPolicy())
-        from PyQt6.QtWidgets import QSizePolicy
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         tb.addWidget(spacer)
 
@@ -154,10 +186,23 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(left)
 
-        # ── Right Panel (editor) ── fills remaining space
+        # ── Right Panel (stacked views) ── fills remaining space
+        from PyQt6.QtWidgets import QStackedWidget
+        self._stack = QStackedWidget()
+
         self._editor = DigimonEditor()
         self._editor.field_changed.connect(self._on_field_changed)
-        main_layout.addWidget(self._editor, 1)  # stretch factor 1
+        self._stack.addWidget(self._editor)  # index 0
+
+        self._scan_editor = ScanEditor()
+        self._scan_editor.data_changed.connect(self._update_dirty_indicator)
+        self._stack.addWidget(self._scan_editor)  # index 1
+
+        self._agent_editor = AgentEditor()
+        self._agent_editor.data_changed.connect(self._update_dirty_indicator)
+        self._stack.addWidget(self._agent_editor)  # index 2
+
+        main_layout.addWidget(self._stack, 1)  # stretch factor 1
 
     def _build_statusbar(self):
         sb = QStatusBar()
@@ -182,7 +227,10 @@ class MainWindow(QMainWindow):
             self._roster = self._save_file.read_roster()
             self._roster_list.set_roster(self._roster)
             self._editor.clear()
+            self._scan_editor.set_save_file(self._save_file)
+            self._agent_editor.set_save_file(self._save_file)
             self._current_entry = None
+            self._switch_view("digimon")
 
             basename = os.path.basename(path)
             self._status_file.setText(f"File: {basename}")
@@ -218,12 +266,24 @@ class MainWindow(QMainWindow):
             self._save_file.path = path
             self._on_save()
 
+    # ── View switching ──
+
+    def _switch_view(self, name):
+        """Switch between Digimon editor, scan table, and agent data."""
+        view_map = {"digimon": 0, "scan": 1, "agent": 2}
+        idx = view_map.get(name, 0)
+        self._stack.setCurrentIndex(idx)
+        # Update button states
+        for key, btn in self._view_btns.items():
+            btn.setChecked(key == name)
+
     # ── Selection ──
 
     def _on_digimon_selected(self, entry):
         """Called when user clicks a Digimon in the roster list."""
         self._current_entry = entry
         self._editor.set_entry(entry)
+        self._switch_view("digimon")
 
     # ── Editing ──
 
