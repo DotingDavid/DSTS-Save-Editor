@@ -5,8 +5,7 @@ Editable: white stats, farm stats, blue stats.
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-                              QLabel, QSpinBox, QFrame, QGroupBox, QTabWidget,
-                              QScrollArea)
+                              QLabel, QSpinBox, QFrame, QGroupBox, QTabWidget)
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.style import (STAT_COLORS, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
@@ -39,14 +38,9 @@ class StatEditor(QWidget):
         self._build_ui()
 
     def _build_ui(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(4)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(3)
 
         # ── Legend ──
         legend = QHBoxLayout()
@@ -127,7 +121,7 @@ class StatEditor(QWidget):
         layout.addWidget(bd_header)
 
         bd_grid = QGridLayout()
-        bd_grid.setSpacing(2)
+        bd_grid.setSpacing(1)
         for col, (text, color) in enumerate(
                 [("", TEXT_SECONDARY), ("Base", STAT_BASE), ("Growth", STAT_WHITE),
                  ("Farm", STAT_FARM), ("Blue", STAT_BLUE), ("Total", TEXT_VALUE)]):
@@ -206,13 +200,7 @@ class StatEditor(QWidget):
             farm_grid.addWidget(spin, row, col + 1)
         adv_tabs.addTab(farm_widget, "Farm Training")
 
-        layout.addWidget(adv_tabs)
-        layout.addStretch()
-
-        scroll.setWidget(container)
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll)
+        layout.addWidget(adv_tabs, 1)  # tabs get remaining space
 
     def set_entry(self, entry):
         self._updating = True

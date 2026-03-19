@@ -5,7 +5,7 @@ Clean layout with grouped sections and visual hierarchy.
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
                               QLabel, QSpinBox, QComboBox, QSlider, QFrame,
-                              QLineEdit, QPushButton, QScrollArea, QGridLayout)
+                              QLineEdit, QPushButton, QGridLayout)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
@@ -23,8 +23,8 @@ def _card(title):
         f"background-color: rgba(18, 18, 32, 180); "
         f"border: 1px solid {BORDER}; border-radius: 6px;")
     layout = QVBoxLayout(card)
-    layout.setContentsMargins(12, 8, 12, 10)
-    layout.setSpacing(6)
+    layout.setContentsMargins(10, 6, 10, 6)
+    layout.setSpacing(4)
     if title:
         lbl = QLabel(title)
         lbl.setStyleSheet(
@@ -46,15 +46,9 @@ class IdentityEditor(QWidget):
         self._build_ui()
 
     def _build_ui(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        layout = QVBoxLayout(container)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
 
         # ── Species Header Card ──
         header_card, header_layout = _card(None)
@@ -254,11 +248,6 @@ class IdentityEditor(QWidget):
 
         layout.addWidget(evo_card)
         layout.addStretch()
-
-        scroll.setWidget(container)
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll)
 
     def set_entry(self, entry):
         self._updating = True
