@@ -236,6 +236,12 @@ class SaveFile:
             equip_1 = struct.unpack('<h', d[offset + 0x130:offset + 0x132])[0]
             equip_2 = struct.unpack('<h', d[offset + 0x132:offset + 0x134])[0]
 
+            # Attachment skills (4 slots, each u16 skill + u16 padding)
+            attach_skills = []
+            for slot in range(4):
+                sid = struct.unpack('<H', d[offset + 0x120 + slot * 4:offset + 0x122 + slot * 4])[0]
+                attach_skills.append(sid)
+
             nickname = entry_name if entry_name != info["name"] else None
 
             # Determine location (party vs box vs farm)
@@ -284,6 +290,7 @@ class SaveFile:
                 "creation_hash": creation_hash,
                 "equip_1": equip_1,
                 "equip_2": equip_2,
+                "attach_skills": attach_skills,
                 "location": location,
                 "evo_history": evo_history,
             }

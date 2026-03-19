@@ -58,8 +58,8 @@ class StatEditor(QWidget):
         grid.setSpacing(6)
         grid.setColumnMinimumWidth(0, 36)   # stat name
         grid.setColumnStretch(1, 1)          # bar stretches
-        grid.setColumnMinimumWidth(2, 70)   # blue spinbox
-        grid.setColumnMinimumWidth(3, 50)   # total
+        grid.setColumnMinimumWidth(2, 90)   # blue spinbox
+        grid.setColumnMinimumWidth(3, 55)   # total
 
         # Header row
         for col, text in [(0, ""), (1, ""), (2, "Blue"), (3, "Total")]:
@@ -84,7 +84,7 @@ class StatEditor(QWidget):
             # Blue stat spinbox (inline)
             spin = QSpinBox()
             spin.setRange(-9999, 9999)
-            spin.setFixedWidth(70)
+            spin.setFixedWidth(90)
             spin.setAlignment(Qt.AlignmentFlag.AlignRight)
             spin.setStyleSheet(f"""
                 QSpinBox {{

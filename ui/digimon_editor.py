@@ -9,6 +9,7 @@ from PyQt6.QtCore import pyqtSignal
 from ui.style import TEXT_SECONDARY
 from ui.identity_editor import IdentityEditor
 from ui.stat_editor import StatEditor
+from ui.skills_editor import SkillsEditor
 
 
 class DigimonEditor(QWidget):
@@ -43,12 +44,8 @@ class DigimonEditor(QWidget):
             lambda key, val: self._on_field_changed(f"blue_{key}", val))
         self._tabs.addTab(self._stats, "Stats")
 
-        # Skills tab - placeholder for now
-        self._skills_placeholder = QLabel(
-            "Skills & Equipment editing\ncoming soon...")
-        self._skills_placeholder.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; padding: 20px;")
-        self._tabs.addTab(self._skills_placeholder, "Skills")
+        self._skills = SkillsEditor()
+        self._tabs.addTab(self._skills, "Skills")
 
         self._tabs.hide()
         layout.addWidget(self._placeholder)
@@ -61,6 +58,7 @@ class DigimonEditor(QWidget):
         self._tabs.show()
         self._identity.set_entry(entry)
         self._stats.set_entry(entry)
+        self._skills.set_entry(entry)
 
     def clear(self):
         """Show placeholder when nothing is selected."""
