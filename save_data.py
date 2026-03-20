@@ -222,15 +222,41 @@ class SaveFile:
                                                      row["def_"], row["int_"],
                                                      row["spi"], row["spd"]]
 
-        # Scan only known roster regions at correct strides
-        # Party+box: db_id at 0x001024, stride 0x150 (36-byte header in region)
-        # Farm:      db_id at 0x053074, stride 0x158 (116-byte header in region)
-        # Name field is always db_id + 4
+        # Dynamically detect roster alignment by finding first valid
+        # entry in each region, then scanning at the known stride.
+        # This avoids hardcoding base offsets that may vary.
+        def _find_stride_base(region_start, region_end, stride, valid_ids):
+            """Find the first valid Digimon in a region and derive stride base."""
+            for off in range(region_start, min(region_start + stride * 20, region_end), 4):
+                db_id = struct.unpack('<I', d[off:off + 4])[0]
+                if db_id not in valid_ids:
+                    continue
+                name_off = off + 4
+                if name_off + 0x64 > len(d):
+                    continue
+                name_end = d.find(b'\x00', name_off, name_off + 32)
+                if name_end <= name_off:
+                    continue
+                lv = struct.unpack('<i', d[name_off + 0x60:name_off + 0x64])[0]
+                if 1 <= lv <= 99:
+                    # Found valid entry — compute stride-aligned base
+                    base = region_start + ((off - region_start) % stride)
+                    return base
+            return None
+
         scan_offsets = []
-        for db_off in range(0x001024, 0x053000, 0x150):
-            scan_offsets.append((db_off + 4, "party_box"))
-        for db_off in range(0x053074, 0x05C000, 0x158):
-            scan_offsets.append((db_off + 4, "farm"))
+
+        # Party+box: 0x001000-0x053000, stride 0x150
+        pb_base = _find_stride_base(0x001000, 0x009000, 0x150, id_to_info)
+        if pb_base is not None:
+            for db_off in range(pb_base, 0x053000, 0x150):
+                scan_offsets.append((db_off + 4, "party_box"))
+
+        # Farm: 0x053000-0x05C000, stride 0x158
+        fm_base = _find_stride_base(0x053000, 0x055000, 0x158, id_to_info)
+        if fm_base is not None:
+            for db_off in range(fm_base, 0x05C000, 0x158):
+                scan_offsets.append((db_off + 4, "farm"))
 
         for offset, region in scan_offsets:
             db_id = struct.unpack('<I', d[offset - 4:offset])[0]
@@ -347,8 +373,9 @@ class SaveFile:
             }
             results.append(entry)
 
-        # First 6 entries in party_box region are party members
-        # (sorted by offset to preserve array order)
+        # Party = first 6 valid entries in the roster array (sorted by offset).
+        # The game stores party members at the start of the array.
+        # Empty padding slots are skipped, so we count filled entries.
         party_box_entries = sorted(
             [e for e in results if e["location"] == "party_box_pending"],
             key=lambda e: e["_offset"])
