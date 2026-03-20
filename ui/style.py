@@ -146,15 +146,17 @@ QComboBox:hover {{
     border-color: {BORDER_BRIGHT};
 }}
 QComboBox::drop-down {{
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    width: 24px;
     border: none;
-    width: 20px;
+    border-left: 1px solid {BORDER};
 }}
 QComboBox::down-arrow {{
     image: none;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid {TEXT_SECONDARY};
-    margin-right: 6px;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 7px solid {ACCENT};
 }}
 QComboBox QAbstractItemView {{
     background-color: #1E1E37;
