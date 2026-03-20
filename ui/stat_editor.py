@@ -70,12 +70,13 @@ class StatEditor(QWidget):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 2, 6, 2)
-        layout.setSpacing(1)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
 
         # ── Compact bars at top ──
         bar_wrapper = QHBoxLayout()
         bar_wrapper.setContentsMargins(0, 0, 0, 0)
+        bar_wrapper.addStretch(1)
 
         bar_grid = QGridLayout()
         bar_grid.setSpacing(1)
@@ -104,11 +105,13 @@ class StatEditor(QWidget):
             bar_grid.addWidget(total, row, 2)
 
         bar_wrapper.addLayout(bar_grid)
+        bar_wrapper.addStretch(1)
         layout.addLayout(bar_wrapper)
 
         # ── Table fills remaining height, constrained width ──
         table_wrapper = QHBoxLayout()
         table_wrapper.setContentsMargins(0, 0, 0, 0)
+        table_wrapper.addStretch(1)
 
         table = QGridLayout()
         table.setSpacing(0)
@@ -200,8 +203,9 @@ class StatEditor(QWidget):
             table.addWidget(total, row, 5)
 
         table_wrapper.addLayout(table)
+        table_wrapper.addStretch(1)
         layout.addLayout(table_wrapper)
-        layout.addStretch()  # push everything up, empty space at bottom only
+        layout.addStretch()
 
     def set_entry(self, entry):
         self._updating = True
