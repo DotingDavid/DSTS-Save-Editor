@@ -436,34 +436,27 @@ class SaveFile:
         for i, entry in enumerate(party_box_entries):
             entry["location"] = "party" if i < 6 else "box"
 
-        # Remove stale farm copies of party members.
-        # When Digimon move from farm to party, the game doesn't
-        # always clear the farm slot. Only match against party —
-        # farm + box can legitimately have same species at same level.
-        party_set = set()
-        for e in results:
-            if e["location"] == "party":
-                party_set.add((e["db_id"], e["level"]))
-        results = [e for e in results
-                   if e["location"] != "farm"
-                   or (e["db_id"], e["level"]) not in party_set]
-
-        # Dedup by (creation_hash, species) — only merge true duplicates
+        # Dedup by creation hash alone.
+        # The hash is the individual's identity — it persists through
+        # evolution and location moves. A farm Bearmon (hash X) that
+        # evolved into party Frigimon (hash X) is the same individual.
+        # Keep the highest-priority location: party > box > farm.
+        LOC_PRIORITY = {"party": 0, "box": 1, "farm": 2}
         seen = {}
         deduped = []
         for entry in results:
             h = entry["creation_hash"]
-            key = (h, entry["db_id"])
             if h and h > 0x10:
-                if key in seen:
-                    prev = seen[key]
-                    prev_total = sum(prev["total"].values())
-                    cur_total = sum(entry["total"].values())
-                    if cur_total > prev_total:
+                pri = LOC_PRIORITY.get(entry["location"], 3)
+                if h in seen:
+                    prev, prev_pri = seen[h]
+                    if pri < prev_pri:
+                        # Higher priority location — replace
                         deduped[deduped.index(prev)] = entry
-                        seen[key] = entry
+                        seen[h] = (entry, pri)
+                    # else: keep the existing higher-priority entry
                 else:
-                    seen[key] = entry
+                    seen[h] = (entry, pri)
                     deduped.append(entry)
             else:
                 deduped.append(entry)
