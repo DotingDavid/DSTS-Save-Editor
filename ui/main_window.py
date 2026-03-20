@@ -207,6 +207,7 @@ class MainWindow(QMainWindow):
         self._grid.digimon_selected.connect(self._on_grid_selected)
         self._grid.clone_requested.connect(self._on_clone)
         self._grid.export_requested.connect(self._on_export)
+        self._grid.create_requested.connect(self._on_create_digimon)
         self._stack.addWidget(self._grid)  # 1: grid
 
         self._scan_editor = ScanEditor()
@@ -357,7 +358,25 @@ class MainWindow(QMainWindow):
         if dlg.changes_made:
             self._update_dirty_indicator()
 
-    # ── Clone / Export / Import ──
+    # ── Create / Clone / Export / Import ──
+
+    def _on_create_digimon(self):
+        if not self._save_file:
+            return
+        from ui.digimon_creator import DigimonCreatorDialog
+        dlg = DigimonCreatorDialog(self)
+        if dlg.exec() and dlg.selected_id:
+            try:
+                self._save_file.create_digimon(
+                    dlg.selected_id, dlg.level, dlg.personality_id)
+                self._roster = self._save_file.read_roster()
+                self._grid.set_roster(self._roster)
+                self._update_dirty_indicator()
+                from save_data import get_digimon_name
+                name = get_digimon_name(dlg.selected_id)
+                show_toast(self, f"Created {name} Lv{dlg.level}", "success")
+            except Exception as e:
+                QMessageBox.critical(self, "Create Error", str(e))
 
     def _on_clone(self, entry):
         if not self._save_file:

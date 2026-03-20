@@ -5,7 +5,7 @@ Displays Digimon as a grid of clickable icons, grouped by Party/Box/Farm.
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
                               QLabel, QGridLayout, QSizePolicy, QLineEdit,
-                              QComboBox, QMenu)
+                              QComboBox, QMenu, QPushButton)
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QCursor, QPixmap, QAction
 
@@ -121,6 +121,7 @@ class RosterGrid(QWidget):
     digimon_selected = pyqtSignal(dict)
     clone_requested = pyqtSignal(dict)
     export_requested = pyqtSignal(dict)
+    create_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -154,6 +155,19 @@ class RosterGrid(QWidget):
         self._sort_combo.currentIndexChanged.connect(self._on_sort_changed)
         self._sort_combo.setFixedWidth(110)
         toolbar.addWidget(self._sort_combo)
+
+        self._create_btn = QPushButton("+ Create")
+        self._create_btn.setFixedHeight(24)
+        self._create_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {ACCENT};
+                border: 1px solid {ACCENT}; border-radius: 3px;
+                font-size: 10px; font-weight: bold; padding: 0 8px;
+            }}
+            QPushButton:hover {{ background: rgba(0,191,255,0.1); }}
+        """)
+        self._create_btn.clicked.connect(self.create_requested.emit)
+        toolbar.addWidget(self._create_btn)
 
         outer.addLayout(toolbar)
 

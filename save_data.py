@@ -547,6 +547,48 @@ class SaveFile:
         self._mark_dirty()
         return dest
 
+    # ── Create from scratch ──
+
+    def create_digimon(self, db_id, level=1, personality_id=1):
+        """Create a brand new Digimon in an empty box slot. Returns offset."""
+        dest = self.find_empty_slot()
+        if dest is None:
+            raise RuntimeError("No empty roster slots available")
+
+        info = get_digimon_info(db_id)
+        if not info:
+            raise ValueError(f"Unknown Digimon ID: {db_id}")
+        base_stats = get_base_stats(db_id)
+
+        # Clear the full struct area (db_id at -4 through +0x14F)
+        for i in range(0x154):
+            self._data[dest - 4 + i] = 0
+
+        # db_id
+        struct.pack_into('<I', self._data, dest - 4, db_id)
+        # db_id copy
+        struct.pack_into('<I', self._data, dest + 0x104, db_id)
+        # Name
+        self.write_nickname(dest, info["name"])
+        # Level
+        struct.pack_into('<i', self._data, dest + 0x60, level)
+        # Personality
+        self._data[dest + 0xEE] = personality_id & 0xFF
+        struct.pack_into('<I', self._data, dest + 0xEC, personality_id << 16)
+        # Current HP/SP from base stats
+        struct.pack_into('<i', self._data, dest + 0x6C, base_stats[0])
+        struct.pack_into('<i', self._data, dest + 0x70, base_stats[1])
+        # Creation hash
+        new_hash = random.randint(0x1000, 0xFFFFFFFF)
+        struct.pack_into('<I', self._data, dest + 0x148, new_hash)
+        # Box (not party)
+        struct.pack_into('<I', self._data, dest + 0x11C, 0)
+        # Active
+        struct.pack_into('<I', self._data, dest + 0x140, 1)
+
+        self._mark_dirty()
+        return dest
+
     # ── Export/Import ──
 
     def export_digimon(self, entry_offset):
