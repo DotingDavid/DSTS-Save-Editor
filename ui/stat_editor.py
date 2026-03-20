@@ -27,7 +27,8 @@ class _Cell(QSpinBox):
         self.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setFixedWidth(70)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.setMaximumHeight(30)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.setStyleSheet(f"""
             QSpinBox {{
                 background: transparent;
@@ -73,11 +74,14 @@ class StatEditor(QWidget):
         layout.setSpacing(2)
 
         # ── Compact bars at top ──
+        bar_wrapper = QHBoxLayout()
+        bar_wrapper.addStretch()
+
         bar_grid = QGridLayout()
         bar_grid.setSpacing(1)
         bar_grid.setColumnMinimumWidth(0, 32)
-        bar_grid.setColumnStretch(1, 1)
-        bar_grid.setColumnMinimumWidth(2, 40)
+        bar_grid.setColumnMinimumWidth(1, 400)
+        bar_grid.setColumnMinimumWidth(2, 36)
 
         for row, (key, label) in enumerate(zip(STAT_KEYS, STAT_LABELS)):
             name = QLabel(label)
@@ -99,7 +103,9 @@ class StatEditor(QWidget):
             self._bar_totals[key] = total
             bar_grid.addWidget(total, row, 2)
 
-        layout.addLayout(bar_grid)
+        bar_wrapper.addLayout(bar_grid)
+        bar_wrapper.addStretch()
+        layout.addLayout(bar_wrapper)
 
         # ── Table fills remaining height, constrained width ──
         table_wrapper = QHBoxLayout()
