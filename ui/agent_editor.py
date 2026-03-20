@@ -1,20 +1,31 @@
 """Agent/Player data editor.
 
-Edit money, Tamer Points, and view agent skill tree info.
+Edit money, Tamer Points, agent rank, and unlock skill trees.
 """
 
 import struct
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QLabel,
-                              QSpinBox, QGroupBox, QFrame, QHBoxLayout)
+                              QSpinBox, QGroupBox, QFrame, QHBoxLayout,
+                              QPushButton, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.style import (ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
                        BORDER, PERS_COLORS)
-from save_layout import AGENT_BASE_OFFSET
+from save_layout import AGENT_BASE_OFFSET, AGENT_SKILL_OFFSET, AGENT_SKILL_STRIDE
+
+
+# Category ID → (name, tree_group range start, tree_group range end, count_offset)
+CATEGORIES = {
+    1: ("Valor",        1,   50,  0x068),
+    2: ("Philanthropy", 51,  100, 0x06C),
+    3: ("Amicability",  101, 150, 0x070),
+    4: ("Wisdom",       151, 200, 0x074),
+    5: ("Loyalty",      201, 224, 0x080),
+}
 
 
 class AgentEditor(QWidget):
-    """Edit player/agent data: money, TP, rank."""
+    """Edit player/agent data: money, TP, rank, skills."""
 
     data_changed = pyqtSignal()
 
@@ -76,26 +87,73 @@ class AgentEditor(QWidget):
 
         layout.addLayout(info_form)
 
-        # ── Skill Tree ──
-        tree_group = QGroupBox("Agent Skill Tree (Read-Only)")
-        tree_layout = QFormLayout()
-        tree_layout.setSpacing(4)
+        # ── Skill Trees ──
+        tree_group = QGroupBox("Agent Skill Tree")
+        tree_layout = QVBoxLayout()
+        tree_layout.setSpacing(6)
 
         self._skill_labels = {}
-        categories = [
-            ("Valor", "valor", PERS_COLORS["Valor"]),
-            ("Philanthropy", "phil", PERS_COLORS["Philanthropy"]),
-            ("Amicability", "amic", PERS_COLORS["Amicability"]),
-            ("Wisdom", "wisdom", PERS_COLORS["Wisdom"]),
-            ("Loyalty", "loyalty", TEXT_VALUE),
-        ]
-        for name, key, color in categories:
-            lbl = QLabel("—")
-            lbl.setStyleSheet(f"color: {color};")
-            self._skill_labels[key] = lbl
+        self._unlock_btns = {}
+
+        cat_colors = {
+            1: PERS_COLORS["Valor"],
+            2: PERS_COLORS["Philanthropy"],
+            3: PERS_COLORS["Amicability"],
+            4: PERS_COLORS["Wisdom"],
+            5: TEXT_VALUE,
+        }
+
+        for cat_id, (name, _, _, _) in CATEGORIES.items():
+            color = cat_colors[cat_id]
+            row = QHBoxLayout()
+            row.setSpacing(8)
+
             name_lbl = QLabel(f"{name}:")
             name_lbl.setStyleSheet(f"color: {color}; font-weight: bold;")
-            tree_layout.addRow(name_lbl, lbl)
+            name_lbl.setFixedWidth(110)
+            row.addWidget(name_lbl)
+
+            count_lbl = QLabel("—")
+            count_lbl.setStyleSheet(f"color: {color};")
+            count_lbl.setFixedWidth(100)
+            self._skill_labels[cat_id] = count_lbl
+            row.addWidget(count_lbl)
+
+            btn = QPushButton("Unlock All")
+            btn.setFixedWidth(80)
+            btn.setFixedHeight(22)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {TEXT_SECONDARY};
+                    border: 1px solid {BORDER}; border-radius: 3px;
+                    font-size: 9px;
+                }}
+                QPushButton:hover {{ color: {color}; border-color: {color}; }}
+            """)
+            btn.clicked.connect(lambda _, c=cat_id: self._unlock_category(c))
+            self._unlock_btns[cat_id] = btn
+            row.addWidget(btn)
+            row.addStretch()
+
+            tree_layout.addLayout(row)
+
+        # Unlock All button
+        all_row = QHBoxLayout()
+        all_row.setSpacing(8)
+        self._unlock_all_btn = QPushButton("Unlock All Skills")
+        self._unlock_all_btn.setFixedHeight(28)
+        self._unlock_all_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {ACCENT};
+                border: 1px solid {ACCENT}; border-radius: 4px;
+                font-size: 11px; font-weight: bold; padding: 0 16px;
+            }}
+            QPushButton:hover {{ background: rgba(0,191,255,0.1); }}
+        """)
+        self._unlock_all_btn.clicked.connect(self._unlock_all)
+        all_row.addWidget(self._unlock_all_btn)
+        all_row.addStretch()
+        tree_layout.addLayout(all_row)
 
         tree_group.setLayout(tree_layout)
         layout.addWidget(tree_group)
@@ -119,19 +177,73 @@ class AgentEditor(QWidget):
         rank = struct.unpack('<I', d[base + 0x064:base + 0x068])[0]
         self._rank_label.setText(str(rank))
 
-        valor = struct.unpack('<I', d[base + 0x068:base + 0x06C])[0]
-        phil = struct.unpack('<I', d[base + 0x06C:base + 0x070])[0]
-        amic = struct.unpack('<I', d[base + 0x070:base + 0x074])[0]
-        wisdom = struct.unpack('<I', d[base + 0x074:base + 0x078])[0]
-        loyalty = struct.unpack('<I', d[base + 0x080:base + 0x084])[0]
-
-        self._skill_labels["valor"].setText(f"{valor} purchased")
-        self._skill_labels["phil"].setText(f"{phil} purchased")
-        self._skill_labels["amic"].setText(f"{amic} purchased")
-        self._skill_labels["wisdom"].setText(f"{wisdom} purchased")
-        self._skill_labels["loyalty"].setText(f"{loyalty} purchased")
-
+        self._refresh_skill_counts()
         self._updating = False
+
+    def _refresh_skill_counts(self):
+        """Read skill records and update category counts."""
+        if not self._save_file:
+            return
+        d = self._save_file._data
+        base = AGENT_BASE_OFFSET
+        skill_base = base + AGENT_SKILL_OFFSET
+
+        # Count purchased per category
+        counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+        totals = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+
+        for i in range(208):
+            off = skill_base + i * AGENT_SKILL_STRIDE
+            cat = struct.unpack('<I', d[off + 4:off + 8])[0]
+            purchased = d[off + 8]
+            if cat in counts:
+                totals[cat] += 1
+                if purchased:
+                    counts[cat] += 1
+
+        for cat_id, (name, _, _, _) in CATEGORIES.items():
+            bought = counts.get(cat_id, 0)
+            total = totals.get(cat_id, 0)
+            lbl = self._skill_labels[cat_id]
+            if bought == total and total > 0:
+                lbl.setText(f"{bought}/{total} (complete)")
+            else:
+                lbl.setText(f"{bought}/{total}")
+
+    def _unlock_category(self, cat_id):
+        """Unlock all skills in a category."""
+        if not self._save_file:
+            return
+        d = self._save_file._data
+        base = AGENT_BASE_OFFSET
+        skill_base = base + AGENT_SKILL_OFFSET
+
+        unlocked = 0
+        for i in range(208):
+            off = skill_base + i * AGENT_SKILL_STRIDE
+            cat = struct.unpack('<I', d[off + 4:off + 8])[0]
+            if cat == cat_id:
+                if not d[off + 8]:  # not yet purchased
+                    d[off + 8] = 1   # purchased
+                    d[off + 9] = 1   # visible
+                    unlocked += 1
+
+        if unlocked > 0:
+            # Update the category purchase count
+            _, _, _, count_off = CATEGORIES[cat_id]
+            old_count = struct.unpack('<I', d[base + count_off:base + count_off + 4])[0]
+            struct.pack_into('<I', d, base + count_off, old_count + unlocked)
+
+            self._save_file._mark_dirty()
+            self._refresh_skill_counts()
+            self.data_changed.emit()
+
+    def _unlock_all(self):
+        """Unlock all skills in all categories."""
+        if not self._save_file:
+            return
+        for cat_id in CATEGORIES:
+            self._unlock_category(cat_id)
 
     def _on_money_changed(self, value):
         if not self._updating and self._save_file:
