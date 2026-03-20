@@ -203,6 +203,7 @@ class RosterGrid(QWidget):
         for entry in roster:
             loc = entry.get("location", "box")
             groups.get(loc, groups["box"]).append(entry)
+        groups["box"].reverse()
 
         section_config = [
             ("party", f"Party ({len(groups['party'])})", ACCENT),
