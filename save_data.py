@@ -355,6 +355,8 @@ class SaveFile:
                 creation_hash = farm_hash
             else:
                 creation_hash = struct.unpack('<I', d[offset + 0x148:offset + 0x14C])[0]
+                if creation_hash == 0:
+                    continue  # ghost box entry
 
             exp = struct.unpack('<I', d[offset + 0x64:offset + 0x68])[0]
             cur_hp = struct.unpack('<i', d[offset + 0x6C:offset + 0x70])[0]
@@ -433,6 +435,17 @@ class SaveFile:
             key=lambda e: e["_offset"])
         for i, entry in enumerate(party_box_entries):
             entry["location"] = "party" if i < 6 else "box"
+
+        # Remove stale farm copies of party members.
+        # When the game moves a Digimon from farm to party, it doesn't
+        # always clear the farm slot. Detect by species + level match.
+        party_set = set()
+        for e in results:
+            if e["location"] == "party":
+                party_set.add((e["db_id"], e["level"]))
+        results = [e for e in results
+                   if e["location"] != "farm"
+                   or (e["db_id"], e["level"]) not in party_set]
 
         # Dedup by (creation_hash, species) — only merge true duplicates,
         # not different Digimon that happen to share a hash
