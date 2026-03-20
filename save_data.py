@@ -292,12 +292,12 @@ class SaveFile:
 
             nickname = entry_name if entry_name != info["name"] else None
 
-            # Determine location (party vs box vs farm)
+            # Determine location — farm entries by region,
+            # party/box determined after scan by array position
             if region == "farm":
                 location = "farm"
             else:
-                active_flag = struct.unpack('<I', d[offset + 0x11C:offset + 0x120])[0]
-                location = "party" if active_flag == 1 else "box"
+                location = "party_box_pending"
 
             # Evolution history
             evo_history = []
@@ -344,6 +344,14 @@ class SaveFile:
                 "evo_history": evo_history,
             }
             results.append(entry)
+
+        # First 6 entries in party_box region are party members
+        # (sorted by offset to preserve array order)
+        party_box_entries = sorted(
+            [e for e in results if e["location"] == "party_box_pending"],
+            key=lambda e: e["_offset"])
+        for i, entry in enumerate(party_box_entries):
+            entry["location"] = "party" if i < 6 else "box"
 
         # Dedup by (creation_hash, species) — only merge true duplicates,
         # not different Digimon that happen to share a hash
