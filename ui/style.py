@@ -3,6 +3,9 @@
 Dark theme matching the ANAMNESIS overlay aesthetic.
 """
 
+import os
+import tempfile
+
 # ── Background Colors ──
 BG_WINDOW = "#0C0C14"
 BG_PANEL = "#121220"
@@ -62,6 +65,28 @@ STAGE_COLORS = {
 DIRTY_COLOR = "#FF8A65"
 CLEAN_COLOR = "#81C784"
 
+
+def _make_arrow_icon():
+    """Generate a small down-arrow PNG and return its path."""
+    path = os.path.join(tempfile.gettempdir(), "anamnesis_combo_arrow.png")
+    if not os.path.exists(path):
+        try:
+            from PyQt6.QtGui import QPixmap, QPainter, QColor, QPolygon
+            from PyQt6.QtCore import QPoint
+            pm = QPixmap(12, 8)
+            pm.fill(QColor(0, 0, 0, 0))
+            p = QPainter(pm)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            p.setBrush(QColor(ACCENT))
+            p.setPen(QColor(0, 0, 0, 0))
+            p.drawPolygon(QPolygon([QPoint(1, 1), QPoint(11, 1), QPoint(6, 7)]))
+            p.end()
+            pm.save(path, "PNG")
+        except Exception:
+            return ""
+    return path.replace("\\", "/")
+
+_ARROW_PATH = _make_arrow_icon()
 
 GLOBAL_STYLESHEET = f"""
 QMainWindow {{
@@ -145,18 +170,19 @@ QComboBox {{
 QComboBox:hover {{
     border-color: {BORDER_BRIGHT};
 }}
+QComboBox {{
+    padding-right: 22px;
+}}
 QComboBox::drop-down {{
     subcontrol-origin: padding;
     subcontrol-position: center right;
-    width: 24px;
+    width: 22px;
     border: none;
-    border-left: 1px solid {BORDER};
 }}
 QComboBox::down-arrow {{
-    image: none;
-    border-left: 6px solid transparent;
-    border-right: 6px solid transparent;
-    border-top: 7px solid {ACCENT};
+    image: url({_ARROW_PATH});
+    width: 12px;
+    height: 8px;
 }}
 QComboBox QAbstractItemView {{
     background-color: #1E1E37;
