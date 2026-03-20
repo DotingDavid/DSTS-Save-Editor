@@ -434,28 +434,31 @@ class SaveFile:
         for i, entry in enumerate(party_box_entries):
             entry["location"] = "party" if i < 6 else "box"
 
-        # Dedup by creation hash alone.
-        # The hash is the individual's identity — it persists through
-        # evolution and location moves. A farm Bearmon (hash X) that
-        # evolved into party Frigimon (hash X) is the same individual.
-        # Keep the highest-priority location: party > box > farm.
-        LOC_PRIORITY = {"party": 0, "box": 1, "farm": 2}
-        seen = {}
+        # Dedup by creation hash, but ONLY within the same region.
+        # Cross-region dedup is unreliable because farm hashes appear
+        # to be derived from slot position, causing frequent collisions
+        # with party/box hashes. Two different Digimon that occupied
+        # the same farm slot at different times share a hash.
+        seen_pb = {}   # party/box hashes
+        seen_farm = {} # farm hashes
         deduped = []
         for entry in results:
             h = entry["creation_hash"]
-            if h and h > 0x10:
-                pri = LOC_PRIORITY.get(entry["location"], 3)
-                if h in seen:
-                    prev, prev_pri = seen[h]
-                    if pri < prev_pri:
-                        # Higher priority location — replace
-                        deduped[deduped.index(prev)] = entry
-                        seen[h] = (entry, pri)
-                    # else: keep the existing higher-priority entry
-                else:
-                    seen[h] = (entry, pri)
-                    deduped.append(entry)
+            loc = entry["location"]
+            if loc in ("party", "box"):
+                if h and h > 0x10 and h in seen_pb:
+                    # Same hash in party/box = true duplicate, keep first
+                    continue
+                if h and h > 0x10:
+                    seen_pb[h] = entry
+                deduped.append(entry)
+            elif loc == "farm":
+                if h and h > 0x10 and h in seen_farm:
+                    # Same hash within farm = true duplicate, keep first
+                    continue
+                if h and h > 0x10:
+                    seen_farm[h] = entry
+                deduped.append(entry)
             else:
                 deduped.append(entry)
 

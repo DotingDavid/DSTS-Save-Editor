@@ -185,6 +185,8 @@ class RosterGrid(QWidget):
         outer.addWidget(self._scroll)
 
         self._container = QWidget()
+        self._container.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         self._main_layout = QVBoxLayout(self._container)
         self._main_layout.setContentsMargins(8, 8, 8, 8)
         self._main_layout.setSpacing(8)
