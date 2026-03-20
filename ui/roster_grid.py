@@ -276,44 +276,55 @@ class RosterGrid(QWidget):
         self.digimon_selected.emit(entry)
 
     def _apply_filters(self):
-        """Apply search text and location filter, then rebuild."""
-        roster = list(self._roster)
+        """Apply search, location filter, and sort — then rebuild.
+
+        Party always keeps its fixed order and is never sorted.
+        Sort only applies to box and farm.
+        """
+        STAGE_ORDER = {
+            "In-Training I": 0, "In-Training II": 1, "Rookie": 2,
+            "Champion": 3, "Armor": 4, "Ultimate": 5, "Mega": 6, "Mega+": 7,
+        }
+
+        # Split party from the rest — party keeps its order
+        party = [e for e in self._roster if e.get("location") == "party"]
+        others = [e for e in self._roster if e.get("location") != "party"]
+
+        # Sort non-party entries
+        sort_idx = self._sort_combo.currentIndex()
+        if sort_idx == 1:  # Name
+            others.sort(key=lambda e: (e.get("nickname") or e["species"]).lower())
+        elif sort_idx == 2:  # Level desc
+            others.sort(key=lambda e: e["level"], reverse=True)
+        elif sort_idx == 3:  # Level asc
+            others.sort(key=lambda e: e["level"])
+        elif sort_idx == 4:  # Stage
+            others.sort(key=lambda e: STAGE_ORDER.get(e.get("stage", ""), 99))
+        elif sort_idx == 5:  # Personality
+            others.sort(key=lambda e: e.get("personality", ""))
+
+        roster = party + others
+
         # Location filter
         loc_idx = self._filter_combo.currentIndex()
         loc_map = {1: "party", 2: "box", 3: "farm"}
         if loc_idx in loc_map:
             roster = [e for e in roster if e.get("location") == loc_map[loc_idx]]
+
         # Search filter
         text = self._search.text().lower().strip()
         if text:
             roster = [e for e in roster
                       if text in (e.get("nickname") or e["species"]).lower()
                       or text in e["species"].lower()]
+
         self._rebuild_grid(roster)
 
     def _filter(self, text):
-        """Filter grid by search text."""
         self._apply_filters()
 
     def _on_filter_changed(self, idx):
-        """Filter by location."""
         self._apply_filters()
 
     def _on_sort_changed(self, idx):
-        """Sort grid by selected criteria."""
-        STAGE_ORDER = {
-            "In-Training I": 0, "In-Training II": 1, "Rookie": 2,
-            "Champion": 3, "Armor": 4, "Ultimate": 5, "Mega": 6, "Mega+": 7,
-        }
-        roster = list(self._roster)
-        if idx == 1:  # Name
-            roster.sort(key=lambda e: (e.get("nickname") or e["species"]).lower())
-        elif idx == 2:  # Level desc
-            roster.sort(key=lambda e: e["level"], reverse=True)
-        elif idx == 3:  # Level asc
-            roster.sort(key=lambda e: e["level"])
-        elif idx == 4:  # Stage
-            roster.sort(key=lambda e: STAGE_ORDER.get(e.get("stage", ""), 99))
-        elif idx == 5:  # Personality
-            roster.sort(key=lambda e: e.get("personality", ""))
-        self._rebuild_grid(roster)
+        self._apply_filters()
