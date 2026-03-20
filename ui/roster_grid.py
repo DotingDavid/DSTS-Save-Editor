@@ -291,8 +291,8 @@ class RosterGrid(QWidget):
 
         # Sort non-party entries
         sort_idx = self._sort_combo.currentIndex()
-        if sort_idx == 0:  # Default — natural array order
-            pass
+        if sort_idx == 0:  # Default — reverse to match game (newest first)
+            others.reverse()
         elif sort_idx == 1:  # Name
             others.sort(key=lambda e: (e.get("nickname") or e["species"]).lower())
         elif sort_idx == 2:  # Level desc
