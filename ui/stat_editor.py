@@ -70,12 +70,12 @@ class StatEditor(QWidget):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 4, 10, 4)
-        layout.setSpacing(2)
+        layout.setContentsMargins(6, 2, 6, 2)
+        layout.setSpacing(1)
 
         # ── Compact bars at top ──
         bar_wrapper = QHBoxLayout()
-        bar_wrapper.addStretch()
+        bar_wrapper.setContentsMargins(0, 0, 0, 0)
 
         bar_grid = QGridLayout()
         bar_grid.setSpacing(1)
@@ -104,20 +104,17 @@ class StatEditor(QWidget):
             bar_grid.addWidget(total, row, 2)
 
         bar_wrapper.addLayout(bar_grid)
-        bar_wrapper.addStretch()
         layout.addLayout(bar_wrapper)
 
         # ── Table fills remaining height, constrained width ──
         table_wrapper = QHBoxLayout()
-        table_wrapper.addStretch()
+        table_wrapper.setContentsMargins(0, 0, 0, 0)
 
         table = QGridLayout()
         table.setSpacing(0)
         table.setContentsMargins(0, 0, 0, 0)
 
-        # Rows stretch vertically to fill space
-        for r in range(1, 8):
-            table.setRowStretch(r, 1)
+        # Rows: no stretch, natural height
 
         # Fixed column widths — no stretching horizontally
         table.setColumnFixedWidth = None  # not a real method, use minimums
@@ -203,8 +200,8 @@ class StatEditor(QWidget):
             table.addWidget(total, row, 5)
 
         table_wrapper.addLayout(table)
-        table_wrapper.addStretch()
-        layout.addLayout(table_wrapper, 1)  # stretch factor 1 = fills remaining height
+        layout.addLayout(table_wrapper)
+        layout.addStretch()  # push everything up, empty space at bottom only
 
     def set_entry(self, entry):
         self._updating = True
