@@ -269,12 +269,14 @@ class SaveFile:
             bond_raw = struct.unpack('<f', d[offset + 0x13C:offset + 0x140])[0]
             bond = round(bond_raw) // 100 if bond_raw > 0 else 0
 
-            # Creation hash — box/party at +0x148, farm at +0x150
-            creation_hash = struct.unpack('<I', d[offset + 0x148:offset + 0x14C])[0]
-            if creation_hash < 0x100 and offset + 0x154 <= len(d):
+            # Creation hash — party/box at +0x148, farm at +0x150
+            if region == "farm":
                 farm_hash = struct.unpack('<I', d[offset + 0x150:offset + 0x154])[0]
-                if farm_hash > 0x100:
-                    creation_hash = farm_hash
+                if farm_hash < 0x100:
+                    continue  # ghost/stale farm entry (no valid hash)
+                creation_hash = farm_hash
+            else:
+                creation_hash = struct.unpack('<I', d[offset + 0x148:offset + 0x14C])[0]
 
             exp = struct.unpack('<I', d[offset + 0x64:offset + 0x68])[0]
             cur_hp = struct.unpack('<i', d[offset + 0x6C:offset + 0x70])[0]
