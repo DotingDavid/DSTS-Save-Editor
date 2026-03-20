@@ -355,8 +355,6 @@ class SaveFile:
                 creation_hash = farm_hash
             else:
                 creation_hash = struct.unpack('<I', d[offset + 0x148:offset + 0x14C])[0]
-                if creation_hash == 0:
-                    continue  # ghost box entry
 
             exp = struct.unpack('<I', d[offset + 0x64:offset + 0x68])[0]
             cur_hp = struct.unpack('<i', d[offset + 0x6C:offset + 0x70])[0]
