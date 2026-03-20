@@ -125,28 +125,42 @@ class NavPanel(QWidget):
         slot_layout.setContentsMargins(10, 0, 10, 6)
         slot_layout.setSpacing(4)
 
-        # Account selector (only shown when multiple Steam accounts)
-        if len(self._all_accounts) > 1:
-            self._account_combo = QComboBox()
-            self._account_combo.setFixedHeight(24)
-            self._account_combo.setStyleSheet(f"""
-                QComboBox {{
-                    background: {BG_INPUT}; color: {TEXT_SECONDARY};
-                    border: 1px solid {BORDER}; border-radius: 3px;
-                    font-size: 10px; padding: 2px 6px;
-                }}
-            """)
+        # Account label + selector (always shown)
+        acct_label = QLabel("ACCOUNT")
+        acct_label.setStyleSheet(
+            f"color: rgba(0,191,255,0.5); font-size: 8px; font-weight: bold; "
+            f"letter-spacing: 2px; background: transparent;")
+        slot_layout.addWidget(acct_label)
+
+        self._account_combo = QComboBox()
+        self._account_combo.setFixedHeight(26)
+        self._account_combo.setStyleSheet(f"""
+            QComboBox {{
+                background: {BG_INPUT}; color: {TEXT_VALUE};
+                border: 1px solid {BORDER}; border-radius: 3px;
+                font-size: 11px; padding: 2px 6px;
+            }}
+        """)
+        if self._all_accounts:
             for steam_id, path, player_name in self._all_accounts:
                 slots = list_save_slots(path)
-                label = f"{player_name} ({len(slots)} saves)"
+                label = f"{player_name}  ({len(slots)} saves)"
                 self._account_combo.addItem(label, path)
-            # Select current account
             for i, (_, path, _) in enumerate(self._all_accounts):
                 if path == self._save_dir:
                     self._account_combo.setCurrentIndex(i)
                     break
-            self._account_combo.currentIndexChanged.connect(self._on_account_changed)
-            slot_layout.addWidget(self._account_combo)
+        else:
+            self._account_combo.addItem("No saves found")
+        self._account_combo.currentIndexChanged.connect(self._on_account_changed)
+        slot_layout.addWidget(self._account_combo)
+
+        # Save slot selector
+        slot_label = QLabel("SAVE SLOT")
+        slot_label.setStyleSheet(
+            f"color: rgba(0,191,255,0.5); font-size: 8px; font-weight: bold; "
+            f"letter-spacing: 2px; background: transparent; padding-top: 2px;")
+        slot_layout.addWidget(slot_label)
 
         self._combo = QComboBox()
         self._combo.setMaxVisibleItems(16)
