@@ -134,13 +134,6 @@ class NavPanel(QWidget):
 
         self._account_combo = QComboBox()
         self._account_combo.setFixedHeight(26)
-        self._account_combo.setStyleSheet(f"""
-            QComboBox {{
-                background: {BG_INPUT}; color: {TEXT_VALUE};
-                border: 1px solid {BORDER}; border-radius: 3px;
-                font-size: 11px; padding: 2px 6px;
-            }}
-        """)
         if self._all_accounts:
             for steam_id, path, player_name in self._all_accounts:
                 slots = list_save_slots(path)

@@ -149,6 +149,13 @@ QComboBox::drop-down {{
     border: none;
     width: 20px;
 }}
+QComboBox::down-arrow {{
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid {TEXT_SECONDARY};
+    margin-right: 6px;
+}}
 QComboBox QAbstractItemView {{
     background-color: #1E1E37;
     color: {TEXT_PRIMARY};
