@@ -557,6 +557,7 @@ SCAN_TABLE_OFFSET = 0x05C100
 SCAN_TABLE_END = 0x05CA20     # extends past 0x5C900 — 583 entries total
 SCAN_TABLE_STRIDE = 4          # (Int16 digi_id, Int16 scan_pct)
 SCAN_TABLE_MAX_ENTRIES = 583   # covers all Digimon IDs
+SCAN_TABLE_REAL_START = 130    # entries 0-129 are garbage header data
 
 # When a scan reaches 100%+, the player can convert it to recruit that Digimon.
 # On conversion: scan_pct set to 0, new Digimon entry created in roster.
@@ -599,15 +600,18 @@ UNKNOWNS = {
 
 
 # ══════════════════════════════════════════════════════════════════════
-# FARM DIGIMON STRUCT (different layout from party/box!)
+# FARM DIGIMON STRUCT (stride 0x158 — 8 bytes longer than party/box)
 # ══════════════════════════════════════════════════════════════════════
-# Farm entries at 0x053000-0x055000 use the SAME stride (0x150) but
-# the fields between +0x000 and +0x060 have DIFFERENT meanings than
-# party/box entries. Discovered via save-diff of training completion.
+# Farm entries at 0x053000-0x055000 use stride 0x158.
+# The core Digimon fields (+0x000 to +0x14C) are identical to party/box,
+# but the creation hash is at +0x150 (party/box uses +0x148) because
+# +0x148 stores the farm slot index in farm entries.
+
+FARM_STRIDE = 0x158
 
 FARM_FIELDS = {
-    # CONFIRMED: Farm Digimon use the EXACT SAME 0x150-byte Digimon struct as party/box.
-    # Located at 0x053000-0x055000, same stride, same field layout.
+    # Farm Digimon share the same core struct layout as party/box.
+    # Located at 0x053000-0x055000, stride 0x158.
     #
     # Training data lives at FIXED offsets within the standard struct:
     #   +0x0D0: Training timer (Float64, ~9.29-9.31 = game time scale)

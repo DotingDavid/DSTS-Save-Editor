@@ -3,10 +3,12 @@
 Displays and edits attachment skills (4 slots) and equipment (2 slots).
 """
 
-import struct
+import logging
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                               QFrame, QComboBox, QGroupBox)
 from PyQt6.QtCore import Qt, pyqtSignal
+
+logger = logging.getLogger(__name__)
 
 from ui.style import (ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
                        BORDER, BG_INPUT, BG_PANEL, STAT_BLUE)
@@ -42,8 +44,8 @@ def _load_equip_list():
                 "SELECT item_id, name FROM equipment ORDER BY name"):
             if row["name"]:
                 _equip_list.append((int(row["item_id"]), row["name"]))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to load equipment list: %s", e)
     return _equip_list
 
 
@@ -179,6 +181,9 @@ class SkillsEditor(QWidget):
             idx = combo.findData(sid)
             if idx >= 0:
                 combo.setCurrentIndex(idx)
+            elif sid and sid != 0:
+                combo.addItem(f"Unknown (#{sid})", sid)
+                combo.setCurrentIndex(combo.count() - 1)
             else:
                 combo.setCurrentIndex(0)
 
@@ -188,6 +193,9 @@ class SkillsEditor(QWidget):
             idx = combo.findData(eid)
             if idx >= 0:
                 combo.setCurrentIndex(idx)
+            elif eid and eid != 0:
+                combo.addItem(f"Unknown (#{eid})", eid)
+                combo.setCurrentIndex(combo.count() - 1)
             else:
                 combo.setCurrentIndex(0)
 

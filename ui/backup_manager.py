@@ -572,11 +572,16 @@ class SaveFileManager(QDialog):
             f"Delete all {len(files)} backup files?\n\nThis cannot be undone.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
+            failed = 0
             for f in files:
                 try:
                     os.remove(os.path.join(backup_dir, f))
                 except Exception:
-                    pass
+                    failed += 1
+            if failed:
+                QMessageBox.warning(
+                    self, "Partial Failure",
+                    f"Failed to delete {failed} of {len(files)} backups.")
             self._refresh_all()
 
     @property

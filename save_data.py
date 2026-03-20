@@ -7,6 +7,7 @@ on an in-memory bytearray — call save() to write back to disk.
 
 import os
 import glob
+import logging
 import shutil
 import struct
 import random
@@ -16,9 +17,17 @@ import json
 import subprocess
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 import save_crypto
-from save_layout import DIGI, REGIONS, AGENT, PERSONALITY_NAMES
+from save_layout import (DIGI, REGIONS, AGENT, PERSONALITY_NAMES,
+                         SCAN_TABLE_OFFSET, SCAN_TABLE_STRIDE,
+                         SCAN_TABLE_REAL_START,
+                         AGENT_BASE_OFFSET, AGENT_SKILL_OFFSET,
+                         AGENT_SKILL_STRIDE)
 from app_paths import get_db_path
+
+VERSION = "0.3.0"
 
 
 # ── Database lookups ────────────────────────────────────────────────
@@ -34,12 +43,23 @@ def _get_db():
     return _db_conn
 
 
+def close_db():
+    """Close the database connection. Call on app exit."""
+    global _db_conn
+    if _db_conn is not None:
+        _db_conn.close()
+        _db_conn = None
+
+
 def get_digimon_name(db_id):
     """Look up Digimon species name by database ID."""
     row = _get_db().execute(
         "SELECT name FROM digimon WHERE id = ?", (db_id,)
     ).fetchone()
-    return row["name"] if row else f"Unknown({db_id})"
+    if row:
+        return row["name"]
+    logger.warning("Unknown Digimon ID: %d", db_id)
+    return f"Unknown({db_id})"
 
 
 def get_digimon_info(db_id):
@@ -58,7 +78,10 @@ def get_base_stats(db_id):
         "SELECT hp, sp, atk, def_, int_, spi, spd FROM stats_base WHERE digimon_id = ?",
         (db_id,)
     ).fetchone()
-    return list(row) if row else [0] * 7
+    if row:
+        return list(row)
+    logger.warning("No base stats for Digimon ID: %d", db_id)
+    return [0] * 7
 
 
 _species_cache = None
@@ -88,7 +111,8 @@ def is_game_running():
             timeout=3
         ).decode('ascii', errors='replace')
         return 'Digimon' in output
-    except Exception:
+    except Exception as e:
+        logger.warning("Game process check failed: %s", e)
         return False
 
 
@@ -97,7 +121,10 @@ def get_item_name(item_id):
     row = _get_db().execute(
         "SELECT name FROM item_names WHERE item_id = ?", (str(item_id),)
     ).fetchone()
-    return row["name"] if row and row["name"] else f"Item #{item_id}"
+    if row and row["name"]:
+        return row["name"]
+    logger.warning("Unknown item ID: %s", item_id)
+    return f"Item #{item_id}"
 
 
 # ── Save file discovery ────────────────────────────────────────────
@@ -165,8 +192,8 @@ def _read_player_name(save_dir):
         parts = [p.strip() for p in header.split(',')]
         if len(parts) > 4:
             return parts[4].strip()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to read player name from %s: %s", save_dir, e)
     return "Unknown"
 
 
@@ -233,6 +260,7 @@ class SaveFile:
     def read_str(self, offset, max_len=32):
         end = self._data.find(b'\x00', offset, offset + max_len)
         if end == -1:
+            logger.warning("No null terminator in string at offset 0x%X (max_len=%d)", offset, max_len)
             end = offset + max_len
         return self._data[offset:end].decode('ascii', errors='replace')
 
@@ -251,6 +279,27 @@ class SaveFile:
     def write_f32(self, offset, value):
         struct.pack_into('<f', self._data, offset, value)
         self._mark_dirty()
+
+    # ── Stride detection (shared by read_roster and find_empty_slot) ──
+
+    def _find_stride_base(self, region_start, region_end, stride, valid_ids):
+        """Find the first valid Digimon in a region and derive stride base."""
+        d = self._data
+        for off in range(region_start, min(region_start + stride * 20, region_end), 4):
+            db_id = struct.unpack('<I', d[off:off + 4])[0]
+            if db_id not in valid_ids:
+                continue
+            name_off = off + 4
+            if name_off + 0x64 > len(d):
+                continue
+            name_end = d.find(b'\x00', name_off, name_off + 32)
+            if name_end <= name_off:
+                continue
+            lv = struct.unpack('<i', d[name_off + 0x60:name_off + 0x64])[0]
+            if 1 <= lv <= 99:
+                base = region_start + ((off - region_start) % stride)
+                return base
+        return None
 
     # ── Roster parsing ──
 
@@ -274,38 +323,16 @@ class SaveFile:
                                                      row["def_"], row["int_"],
                                                      row["spi"], row["spd"]]
 
-        # Dynamically detect roster alignment by finding first valid
-        # entry in each region, then scanning at the known stride.
-        # This avoids hardcoding base offsets that may vary.
-        def _find_stride_base(region_start, region_end, stride, valid_ids):
-            """Find the first valid Digimon in a region and derive stride base."""
-            for off in range(region_start, min(region_start + stride * 20, region_end), 4):
-                db_id = struct.unpack('<I', d[off:off + 4])[0]
-                if db_id not in valid_ids:
-                    continue
-                name_off = off + 4
-                if name_off + 0x64 > len(d):
-                    continue
-                name_end = d.find(b'\x00', name_off, name_off + 32)
-                if name_end <= name_off:
-                    continue
-                lv = struct.unpack('<i', d[name_off + 0x60:name_off + 0x64])[0]
-                if 1 <= lv <= 99:
-                    # Found valid entry — compute stride-aligned base
-                    base = region_start + ((off - region_start) % stride)
-                    return base
-            return None
-
         scan_offsets = []
 
         # Party+box: 0x001000-0x053000, stride 0x150
-        pb_base = _find_stride_base(0x001000, 0x009000, 0x150, id_to_info)
+        pb_base = self._find_stride_base(0x001000, 0x009000, 0x150, id_to_info)
         if pb_base is not None:
             for db_off in range(pb_base, 0x053000, 0x150):
                 scan_offsets.append((db_off + 4, "party_box"))
 
         # Farm: 0x053000-0x05C000, stride 0x158
-        fm_base = _find_stride_base(0x053000, 0x055000, 0x158, id_to_info)
+        fm_base = self._find_stride_base(0x053000, 0x055000, 0x158, id_to_info)
         if fm_base is not None:
             for db_off in range(fm_base, 0x05C000, 0x158):
                 scan_offsets.append((db_off + 4, "farm"))
@@ -473,6 +500,8 @@ class SaveFile:
 
     def write_personality(self, entry_offset, pers_id):
         """Write personality ID (1-16)."""
+        if not (1 <= pers_id <= 16):
+            raise ValueError(f"Personality ID must be 1-16, got {pers_id}")
         self._data[entry_offset + 0xEE] = pers_id & 0xFF
         # Also update the packed personality at +0xEC
         struct.pack_into('<I', self._data, entry_offset + 0xEC, pers_id << 16)
@@ -480,15 +509,21 @@ class SaveFile:
 
     def write_bond(self, entry_offset, bond_percent):
         """Write bond percentage (0-100)."""
+        if not (0 <= bond_percent <= 100):
+            raise ValueError(f"Bond must be 0-100, got {bond_percent}")
         bond_raw = float(bond_percent * 100)
         self.write_f32(entry_offset + 0x13C, bond_raw)
 
     def write_talent(self, entry_offset, talent):
         """Write talent value (0-200)."""
+        if not (0 <= talent <= 200):
+            raise ValueError(f"Talent must be 0-200, got {talent}")
         self.write_i32(entry_offset + 0x100, talent * 1000)
 
     def write_level(self, entry_offset, level):
         """Write level (1-99)."""
+        if not (1 <= level <= 99):
+            raise ValueError(f"Level must be 1-99, got {level}")
         self.write_i32(entry_offset + 0x60, level)
 
     def write_nickname(self, entry_offset, name):
@@ -526,6 +561,8 @@ class SaveFile:
 
     def write_evo_counter(self, entry_offset, count):
         """Write the evolution blue stat grant counter at +0xC8."""
+        if not (0 <= count <= 255):
+            raise ValueError(f"Evo counter must be 0-255, got {count}")
         self.write_u8(entry_offset + 0xC8, count)
 
     def write_attach_skill(self, entry_offset, slot_index, skill_id):
@@ -569,31 +606,15 @@ class SaveFile:
         the new entry will be found on the next scan.
         """
         d = self._data
-        # Find stride base (same logic as read_roster)
-        pb_base = None
-        from save_data import _get_db
         db = _get_db()
         valid_ids = set()
         for row in db.execute("SELECT id FROM digimon"):
             valid_ids.add(row["id"])
 
-        for off in range(0x001000, 0x001000 + 0x150 * 20, 4):
-            db_id = struct.unpack('<I', d[off:off + 4])[0]
-            if db_id not in valid_ids:
-                continue
-            name_off = off + 4
-            if name_off + 0x64 > len(d):
-                continue
-            name_end = d.find(b'\x00', name_off, name_off + 32)
-            if name_end <= name_off:
-                continue
-            lv = struct.unpack('<i', d[name_off + 0x60:name_off + 0x64])[0]
-            if 1 <= lv <= 99:
-                pb_base = 0x001000 + ((off - 0x001000) % 0x150)
-                break
+        pb_base = self._find_stride_base(0x001000, 0x009000, 0x150, valid_ids)
 
         if pb_base is None:
-            pb_base = 0x001024  # fallback
+            return None  # stride detection failed — refuse to guess
 
         # Scan stride-aligned slots starting after party (skip first ~8)
         # Look for an empty slot (db_id == 0)
@@ -690,8 +711,8 @@ class SaveFile:
         display_name = d[entry_offset:name_end].decode('ascii', errors='replace')
 
         return {
-            "format_version": 1,
-            "editor_version": "0.3.0",
+            "format_version": 2,
+            "editor_version": VERSION,
             "species": get_digimon_name(db_id),
             "db_id": db_id,
             "display_name": display_name,
@@ -700,7 +721,7 @@ class SaveFile:
             "personality": PERSONALITY_NAMES.get(d[entry_offset + 0xEE], "?"),
             "talent": struct.unpack('<i', d[entry_offset + 0x100:entry_offset + 0x104])[0] // 1000,
             "evo_fwd_count": d[entry_offset + 0xC8],
-            "raw_hex": raw_b64,
+            "raw_b64": raw_b64,
         }
 
     def import_digimon(self, digi_data):
@@ -709,7 +730,9 @@ class SaveFile:
         if dest is None:
             raise RuntimeError("No empty roster slots available")
 
-        raw = base64.b64decode(digi_data["raw_hex"])
+        # Accept both format_version 1 ("raw_hex") and 2 ("raw_b64")
+        raw_key = "raw_b64" if "raw_b64" in digi_data else "raw_hex"
+        raw = base64.b64decode(digi_data[raw_key])
         if len(raw) != 0x154:
             raise ValueError(f"Invalid raw data size: {len(raw)} (expected {0x154})")
 
@@ -742,11 +765,71 @@ class SaveFile:
         self._mark_dirty()
         return dest
 
+    # ── Scan table access ──
+
+    def read_scan_entry(self, table_index):
+        """Read a scan table entry. Returns (digi_id, scan_pct)."""
+        off = SCAN_TABLE_OFFSET + table_index * SCAN_TABLE_STRIDE
+        digi_id = struct.unpack('<H', self._data[off:off + 2])[0]
+        scan_pct = struct.unpack('<H', self._data[off + 2:off + 4])[0]
+        return digi_id, scan_pct
+
+    def write_scan_pct(self, table_index, pct):
+        """Write a scan percentage (0-200) at the given table index."""
+        off = SCAN_TABLE_OFFSET + table_index * SCAN_TABLE_STRIDE + 2
+        struct.pack_into('<H', self._data, off, pct)
+        self._mark_dirty()
+
+    def scan_summary(self):
+        """Return (scanned_count, full_count) for the scan table."""
+        db = _get_db()
+        valid_ids = set()
+        for row in db.execute("SELECT id FROM digimon"):
+            valid_ids.add(row["id"])
+        scan_count = 0
+        scan_100 = 0
+        for i in range(SCAN_TABLE_REAL_START, 583):
+            digi_id, pct = self.read_scan_entry(i)
+            if digi_id > 0 and digi_id in valid_ids and 0 < pct <= 200:
+                scan_count += 1
+                if pct >= 100:
+                    scan_100 += 1
+        return scan_count, scan_100
+
+    # ── Agent data access ──
+
+    def read_agent_u32(self, relative_offset):
+        """Read a uint32 at AGENT_BASE_OFFSET + relative_offset."""
+        off = AGENT_BASE_OFFSET + relative_offset
+        return struct.unpack('<I', self._data[off:off + 4])[0]
+
+    def write_agent_u32(self, relative_offset, value):
+        """Write a uint32 at AGENT_BASE_OFFSET + relative_offset."""
+        off = AGENT_BASE_OFFSET + relative_offset
+        struct.pack_into('<I', self._data, off, value)
+        self._mark_dirty()
+
+    def read_agent_skill(self, skill_index):
+        """Read agent skill record. Returns (tree_group, category, purchased, visible)."""
+        off = AGENT_BASE_OFFSET + AGENT_SKILL_OFFSET + skill_index * AGENT_SKILL_STRIDE
+        tree_group = struct.unpack('<I', self._data[off:off + 4])[0]
+        category = struct.unpack('<I', self._data[off + 4:off + 8])[0]
+        purchased = self._data[off + 8]
+        visible = self._data[off + 9]
+        return tree_group, category, purchased, visible
+
+    def write_agent_skill_flags(self, skill_index, purchased, visible):
+        """Write purchased and visible flags for an agent skill."""
+        off = AGENT_BASE_OFFSET + AGENT_SKILL_OFFSET + skill_index * AGENT_SKILL_STRIDE
+        self._data[off + 8] = purchased
+        self._data[off + 9] = visible
+        self._mark_dirty()
+
     # ── Save to disk ──
 
     def save(self, backup=True):
         """Encrypt and write back to disk. Creates a timestamped backup first."""
-        if backup:
+        if backup and os.path.exists(self.path):
             backup_dir = os.path.join(os.path.dirname(self.path), 'backups')
             os.makedirs(backup_dir, exist_ok=True)
             basename = os.path.basename(self.path)

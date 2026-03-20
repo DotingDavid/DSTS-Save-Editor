@@ -4,7 +4,6 @@ Shows scanned Digimon as a grid of icons with percentage overlays.
 Click to edit, with search and batch operations.
 """
 
-import struct
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                               QPushButton, QLineEdit, QScrollArea,
                               QGridLayout, QSpinBox, QMessageBox, QDialog,
@@ -15,7 +14,7 @@ from PyQt6.QtGui import QColor, QPixmap, QPainter, QFont
 from ui.style import (ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
                        BG_PANEL, BG_INPUT, BORDER, STAT_FARM, ACCENT_DIM)
 from ui.icon_cache import get_icon
-from save_layout import SCAN_TABLE_OFFSET, SCAN_TABLE_STRIDE
+from save_layout import SCAN_TABLE_REAL_START
 
 GRID_COLS = 10
 ICON_SIZE = 48
@@ -218,13 +217,9 @@ class ScanEditor(QWidget):
             id_to_name[row["id"]] = row["name"]
 
         self._scan_entries = []
-        d = self._save_file._data
 
-        _REAL_START = 130
-        for i in range(_REAL_START, 583):
-            off = SCAN_TABLE_OFFSET + i * SCAN_TABLE_STRIDE
-            digi_id = struct.unpack('<H', d[off:off + 2])[0]
-            scan_pct = struct.unpack('<H', d[off + 2:off + 4])[0]
+        for i in range(SCAN_TABLE_REAL_START, 583):
+            digi_id, scan_pct = self._save_file.read_scan_entry(i)
             if digi_id > 0 and digi_id in id_to_name:
                 scan_pct = min(scan_pct, 200)
                 self._scan_entries.append(
@@ -386,9 +381,7 @@ class ScanEditor(QWidget):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             new_pct = spin.value()
             if new_pct != old_pct:
-                off = SCAN_TABLE_OFFSET + idx * SCAN_TABLE_STRIDE + 2
-                struct.pack_into('<h', self._save_file._data, off, new_pct)
-                self._save_file._mark_dirty()
+                self._save_file.write_scan_pct(idx, new_pct)
                 self._scan_entries[row] = (idx, digi_id, name, new_pct)
                 # Update the slot widget if it still exists
                 for s in self._slots:
@@ -417,10 +410,7 @@ class ScanEditor(QWidget):
             return
 
         for row, (idx, digi_id, name, _) in enumerate(self._scan_entries):
-            off = SCAN_TABLE_OFFSET + idx * SCAN_TABLE_STRIDE + 2
-            struct.pack_into('<h', self._save_file._data, off, value)
+            self._save_file.write_scan_pct(idx, value)
             self._scan_entries[row] = (idx, digi_id, name, value)
-
-        self._save_file._mark_dirty()
         self._rebuild_grid()
         self.data_changed.emit()

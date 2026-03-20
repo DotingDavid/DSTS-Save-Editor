@@ -511,8 +511,11 @@ class FileManagerPanel(QWidget):
             self, "Delete", f"Delete {name}?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            os.remove(path)
-            self._refresh()
+            try:
+                os.remove(path)
+                self._refresh()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Delete failed: {e}")
 
     def _delete_all_backups(self):
         backup_dir = os.path.join(self._save_dir or "", 'backups')
@@ -526,6 +529,14 @@ class FileManagerPanel(QWidget):
             f"Delete all {len(files)} backups? This cannot be undone.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
+            failed = 0
             for f in files:
-                os.remove(os.path.join(backup_dir, f))
+                try:
+                    os.remove(os.path.join(backup_dir, f))
+                except Exception:
+                    failed += 1
+            if failed:
+                QMessageBox.warning(
+                    self, "Partial Failure",
+                    f"Failed to delete {failed} of {len(files)} backups.")
             self._refresh()

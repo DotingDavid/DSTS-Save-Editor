@@ -4,7 +4,6 @@ Left nav panel + center content area (stacked views).
 """
 
 import os
-import struct
 import logging
 
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
@@ -13,8 +12,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
 from PyQt6.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
 
-from save_data import SaveFile, is_game_running
-from save_layout import SCAN_TABLE_OFFSET, SCAN_TABLE_STRIDE
+from save_data import SaveFile, is_game_running, VERSION
 from app_paths import get_app_icon_path
 from ui.style import (GLOBAL_STYLESHEET, BG_PANEL, BG_INPUT, BG_HEADER,
                        BORDER, ACCENT, TEXT_SECONDARY, TEXT_DISABLED,
@@ -62,8 +60,10 @@ class MainWindow(QMainWindow):
         self._build_panels()
         self._build_statusbar()
 
-        # Game process detection timer
+        # Game process detection — single reusable thread
         self._game_running = False
+        self._checker = ProcessChecker()
+        self._checker.result.connect(self._on_process_check)
         self._process_timer = QTimer()
         self._process_timer.timeout.connect(self._check_game_process)
         self._process_timer.start(5000)
@@ -123,7 +123,7 @@ class MainWindow(QMainWindow):
         tb.addWidget(spacer)
 
         # Version
-        ver = QLabel("  ANAMNESIS SE v0.3.0  ")
+        ver = QLabel(f"  ANAMNESIS SE v{VERSION}  ")
         ver.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
         tb.addWidget(ver)
 
@@ -270,22 +270,7 @@ class MainWindow(QMainWindow):
             self._current_entry = None
 
             # Compute scan stats for summary
-            from save_data import _get_db
-            db = _get_db()
-            id_to_name = {}
-            for row in db.execute("SELECT id, name FROM digimon"):
-                id_to_name[row["id"]] = row["name"]
-            d = self._save_file._data
-            scan_count = 0
-            scan_100 = 0
-            for i in range(130, 583):
-                off = SCAN_TABLE_OFFSET + i * SCAN_TABLE_STRIDE
-                did = struct.unpack('<H', d[off:off+2])[0]
-                pct = struct.unpack('<H', d[off+2:off+4])[0]
-                if did > 0 and did in id_to_name and pct > 0 and pct <= 200:
-                    scan_count += 1
-                    if pct >= 100:
-                        scan_100 += 1
+            scan_count, scan_100 = self._save_file.scan_summary()
 
             self._nav.update_summary(self._roster, scan_count, scan_100)
 
@@ -356,6 +341,15 @@ class MainWindow(QMainWindow):
         dlg = BatchOpsDialog(self._save_file, self._roster, self)
         dlg.exec()
         if dlg.changes_made:
+            self._roster = self._save_file.read_roster()
+            self._grid.set_roster(self._roster)
+            if self._current_entry:
+                offset = self._current_entry["_offset"]
+                for e in self._roster:
+                    if e["_offset"] == offset:
+                        self._current_entry = e
+                        self._editor.set_entry(e)
+                        break
             self._update_dirty_indicator()
 
     # ── Create / Clone / Export / Import ──
@@ -448,10 +442,8 @@ class MainWindow(QMainWindow):
     # ── Game process detection ──
 
     def _check_game_process(self):
-        checker = ProcessChecker()
-        checker.result.connect(self._on_process_check)
-        checker.start()
-        self._checker = checker  # prevent GC
+        if not self._checker.isRunning():
+            self._checker.start()
 
     def _on_process_check(self, running):
         self._game_running = running
@@ -558,10 +550,16 @@ class MainWindow(QMainWindow):
                 QMessageBox.StandardButton.Cancel)
             if reply == QMessageBox.StandardButton.Save:
                 self._on_save()
-                event.accept()
             elif reply == QMessageBox.StandardButton.Discard:
-                event.accept()
+                pass
             else:
                 event.ignore()
-        else:
-            event.accept()
+                return
+
+        # Clean up resources
+        self._process_timer.stop()
+        if self._checker.isRunning():
+            self._checker.wait(1000)
+        from save_data import close_db
+        close_db()
+        event.accept()

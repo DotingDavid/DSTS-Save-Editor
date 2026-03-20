@@ -11,7 +11,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from ui.style import (ACCENT, ACCENT_DIM, TEXT_PRIMARY, TEXT_SECONDARY,
                        TEXT_VALUE, BG_PANEL, BG_INPUT, BG_HOVER, BORDER,
                        STAT_FARM, STAT_BLUE)
-from save_data import find_save_directory, find_all_save_directories, list_save_slots
+from save_data import find_save_directory, find_all_save_directories, list_save_slots, VERSION
 
 
 # ── Shared styled helpers ──
@@ -272,7 +272,7 @@ class NavPanel(QWidget):
         layout.addStretch()
 
         # ── Version footer ──
-        ver = QLabel("ANAMNESIS SE v0.3.0")
+        ver = QLabel(f"ANAMNESIS SE v{VERSION}")
         ver.setStyleSheet(
             f"color: rgba(136,136,170,0.4); font-size: 8px; "
             f"background: transparent; padding: 6px;")

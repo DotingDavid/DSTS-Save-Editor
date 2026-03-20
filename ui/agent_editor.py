@@ -3,7 +3,6 @@
 Edit money, Tamer Points, agent rank, and unlock skill trees.
 """
 
-import struct
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QLabel,
                               QSpinBox, QGroupBox, QFrame, QHBoxLayout,
                               QPushButton, QMessageBox)
@@ -11,7 +10,6 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.style import (ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
                        BORDER, PERS_COLORS)
-from save_layout import AGENT_BASE_OFFSET, AGENT_SKILL_OFFSET, AGENT_SKILL_STRIDE
 
 
 # Category ID → (name, tree_group range start, tree_group range end, count_offset)
@@ -164,17 +162,12 @@ class AgentEditor(QWidget):
         """Load agent data from a SaveFile."""
         self._updating = True
         self._save_file = save_file
-        d = save_file._data
-        base = AGENT_BASE_OFFSET
 
-        self._money_spin.setValue(
-            struct.unpack('<I', d[base + 0x058:base + 0x05C])[0])
-        self._tp_avail_spin.setValue(
-            struct.unpack('<I', d[base + 0x05C:base + 0x060])[0])
-        self._tp_spin.setValue(
-            struct.unpack('<I', d[base + 0x060:base + 0x064])[0])
+        self._money_spin.setValue(save_file.read_agent_u32(0x058))
+        self._tp_avail_spin.setValue(save_file.read_agent_u32(0x05C))
+        self._tp_spin.setValue(save_file.read_agent_u32(0x060))
 
-        rank = struct.unpack('<I', d[base + 0x064:base + 0x068])[0]
+        rank = save_file.read_agent_u32(0x064)
         self._rank_label.setText(str(rank))
 
         self._refresh_skill_counts()
@@ -184,18 +177,13 @@ class AgentEditor(QWidget):
         """Read skill records and update category counts."""
         if not self._save_file:
             return
-        d = self._save_file._data
-        base = AGENT_BASE_OFFSET
-        skill_base = base + AGENT_SKILL_OFFSET
 
         # Count purchased per category
         counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
         totals = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
 
         for i in range(208):
-            off = skill_base + i * AGENT_SKILL_STRIDE
-            cat = struct.unpack('<I', d[off + 4:off + 8])[0]
-            purchased = d[off + 8]
+            _, cat, purchased, _ = self._save_file.read_agent_skill(i)
             if cat in counts:
                 totals[cat] += 1
                 if purchased:
@@ -210,31 +198,33 @@ class AgentEditor(QWidget):
             else:
                 lbl.setText(f"{bought}/{total}")
 
-    def _unlock_category(self, cat_id):
+    def _unlock_category(self, cat_id, skip_confirm=False):
         """Unlock all skills in a category."""
         if not self._save_file:
             return
-        d = self._save_file._data
-        base = AGENT_BASE_OFFSET
-        skill_base = base + AGENT_SKILL_OFFSET
+
+        if not skip_confirm:
+            name = CATEGORIES[cat_id][0]
+            reply = QMessageBox.question(
+                self, "Unlock Skills",
+                f"Unlock all {name} skills?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply != QMessageBox.StandardButton.Yes:
+                return
 
         unlocked = 0
         for i in range(208):
-            off = skill_base + i * AGENT_SKILL_STRIDE
-            cat = struct.unpack('<I', d[off + 4:off + 8])[0]
-            if cat == cat_id:
-                if not d[off + 8]:  # not yet purchased
-                    d[off + 8] = 1   # purchased
-                    d[off + 9] = 1   # visible
-                    unlocked += 1
+            _, cat, purchased, _ = self._save_file.read_agent_skill(i)
+            if cat == cat_id and not purchased:
+                self._save_file.write_agent_skill_flags(i, 1, 1)
+                unlocked += 1
 
         if unlocked > 0:
             # Update the category purchase count
             _, _, _, count_off = CATEGORIES[cat_id]
-            old_count = struct.unpack('<I', d[base + count_off:base + count_off + 4])[0]
-            struct.pack_into('<I', d, base + count_off, old_count + unlocked)
+            old_count = self._save_file.read_agent_u32(count_off)
+            self._save_file.write_agent_u32(count_off, old_count + unlocked)
 
-            self._save_file._mark_dirty()
             self._refresh_skill_counts()
             self.data_changed.emit()
 
@@ -242,26 +232,26 @@ class AgentEditor(QWidget):
         """Unlock all skills in all categories."""
         if not self._save_file:
             return
+        reply = QMessageBox.question(
+            self, "Unlock All Skills",
+            "Unlock ALL agent skills in every category?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
         for cat_id in CATEGORIES:
-            self._unlock_category(cat_id)
+            self._unlock_category(cat_id, skip_confirm=True)
 
     def _on_money_changed(self, value):
         if not self._updating and self._save_file:
-            base = AGENT_BASE_OFFSET
-            struct.pack_into('<I', self._save_file._data, base + 0x058, value)
-            self._save_file._mark_dirty()
+            self._save_file.write_agent_u32(0x058, value)
             self.data_changed.emit()
 
     def _on_tp_changed(self, value):
         if not self._updating and self._save_file:
-            base = AGENT_BASE_OFFSET
-            struct.pack_into('<I', self._save_file._data, base + 0x060, value)
-            self._save_file._mark_dirty()
+            self._save_file.write_agent_u32(0x060, value)
             self.data_changed.emit()
 
     def _on_tp_avail_changed(self, value):
         if not self._updating and self._save_file:
-            base = AGENT_BASE_OFFSET
-            struct.pack_into('<I', self._save_file._data, base + 0x05C, value)
-            self._save_file._mark_dirty()
+            self._save_file.write_agent_u32(0x05C, value)
             self.data_changed.emit()

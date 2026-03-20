@@ -3,9 +3,12 @@
 Loads 256x256 PNGs from data/icons/ and caches scaled QPixmaps.
 """
 
+import logging
 import os
-from PyQt6.QtGui import QPixmap, QPixmapCache
+from PyQt6.QtGui import QColor, QPixmap, QPixmapCache
 from PyQt6.QtCore import QSize, Qt
+
+logger = logging.getLogger(__name__)
 
 from app_paths import get_icon_dir
 
@@ -54,9 +57,9 @@ def get_icon(name_or_id, size=64):
     path = os.path.join(_ICON_DIR, f"{slug}.png")
     pm = QPixmap(path)
     if pm.isNull():
-        # Fallback: empty pixmap
+        logger.debug("Icon not found for '%s' (slug: %s)", name, slug)
         pm = QPixmap(size, size)
-        pm.fill()
+        pm.fill(QColor(0, 0, 0, 0))
     else:
         pm = pm.scaled(QSize(size, size),
                        transformMode=Qt.TransformationMode.SmoothTransformation)

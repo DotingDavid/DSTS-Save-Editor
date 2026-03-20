@@ -342,8 +342,12 @@ class IdentityEditor(QWidget):
         if self._updating or not self._entry:
             return
         new = self._nick_edit.text().strip()
-        if new and new != self._entry.get("display_name", ""):
-            self.field_changed.emit("nickname", new)
+        if not new or new == self._entry.get("display_name", ""):
+            return
+        # Don't emit species name as nickname when there was no actual nickname
+        if new == self._entry.get("species", "") and not self._entry.get("nickname"):
+            return
+        self.field_changed.emit("nickname", new)
 
     def _on_change_species(self):
         if not self._entry:
