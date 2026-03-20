@@ -84,7 +84,7 @@ class StatEditor(QWidget):
             bars.addWidget(n, row, 0)
 
             bar = StatBar()
-            bar.setMaximumWidth(500)
+            bar.setMaximumWidth(300)
             self._bars[key] = bar
             bars.addWidget(bar, row, 1)
 
