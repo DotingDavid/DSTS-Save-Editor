@@ -1,55 +1,135 @@
-"""Scan percentage table editor.
+"""Scan percentage table editor — icon grid view.
 
-Shows all 583 Digimon species with their scan percentages.
-Supports inline editing, search filtering, and batch operations.
+Shows scanned Digimon as a grid of icons with percentage overlays.
+Click to edit, with search and batch operations.
 """
 
 import struct
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                              QPushButton, QLineEdit, QTableWidget,
-                              QTableWidgetItem, QHeaderView, QAbstractItemView,
-                              QSpinBox, QStyledItemDelegate, QMessageBox)
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor
+                              QPushButton, QLineEdit, QScrollArea,
+                              QGridLayout, QSpinBox, QMessageBox, QDialog,
+                              QFormLayout, QSizePolicy)
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtGui import QColor, QPixmap, QPainter, QFont
 
 from ui.style import (ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
-                       BG_PANEL, BG_INPUT, BORDER, STAT_FARM, DIRTY_COLOR)
+                       BG_PANEL, BG_INPUT, BORDER, STAT_FARM, ACCENT_DIM)
 from ui.icon_cache import get_icon
 from save_layout import SCAN_TABLE_OFFSET, SCAN_TABLE_STRIDE
 
+GRID_COLS = 10
+ICON_SIZE = 48
 
-class ScanSpinDelegate(QStyledItemDelegate):
-    """Inline spinbox editor for scan percentage column."""
 
-    def createEditor(self, parent, option, index):
-        spin = QSpinBox(parent)
-        spin.setRange(0, 200)
-        spin.setSuffix("%")
-        return spin
+class ScanSlot(QWidget):
+    """Single scan entry — icon with percentage overlay."""
 
-    def setEditorData(self, editor, index):
-        try:
-            val = index.data(Qt.ItemDataRole.EditRole)
-            if val is not None:
-                editor.setValue(int(val))
-            else:
-                editor.setValue(0)
-        except (TypeError, ValueError):
-            editor.setValue(0)
+    clicked = pyqtSignal(int)  # emits row index
 
-    def setModelData(self, editor, model, index):
-        model.setData(index, editor.value(), Qt.ItemDataRole.EditRole)
+    def __init__(self, row, name, pct, parent=None):
+        super().__init__(parent)
+        self._row = row
+        self._name = name
+        self._pct = pct
+        self.setFixedSize(ICON_SIZE + 16, ICON_SIZE + 20)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(f"{name}\n{pct}%")
+        self._build()
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(2, 2, 2, 0)
+        layout.setSpacing(0)
+
+        self._icon = QLabel()
+        self._icon.setFixedSize(ICON_SIZE, ICON_SIZE)
+        self._icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        pm = get_icon(self._name, ICON_SIZE)
+        if self._pct == 0:
+            # Dim the icon for unscanned
+            dark = QPixmap(pm.size())
+            dark.fill(QColor(0, 0, 0, 0))
+            p = QPainter(dark)
+            p.setOpacity(0.25)
+            p.drawPixmap(0, 0, pm)
+            p.end()
+            self._icon.setPixmap(dark)
+        else:
+            self._icon.setPixmap(pm)
+
+        border_color = self._get_border_color()
+        self._icon.setStyleSheet(
+            f"border: 2px solid {border_color}; border-radius: 4px; "
+            f"background: rgba(12,12,20,200);")
+        layout.addWidget(self._icon, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self._pct_label = QLabel(f"{self._pct}%" if self._pct > 0 else "—")
+        color = self._get_text_color()
+        self._pct_label.setStyleSheet(
+            f"color: {color}; font-size: 9px; font-weight: bold; "
+            f"background: transparent; border: none;")
+        self._pct_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._pct_label)
+
+    def _get_border_color(self):
+        if self._pct >= 200:
+            return STAT_FARM
+        elif self._pct >= 100:
+            return ACCENT
+        elif self._pct > 0:
+            return BORDER
+        return "rgba(255,255,255,0.05)"
+
+    def _get_text_color(self):
+        if self._pct >= 200:
+            return STAT_FARM
+        elif self._pct >= 100:
+            return ACCENT
+        elif self._pct > 0:
+            return TEXT_VALUE
+        return TEXT_SECONDARY
+
+    def update_pct(self, pct):
+        self._pct = pct
+        self.setToolTip(f"{self._name}\n{pct}%")
+        self._pct_label.setText(f"{pct}%" if pct > 0 else "—")
+        color = self._get_text_color()
+        self._pct_label.setStyleSheet(
+            f"color: {color}; font-size: 9px; font-weight: bold; "
+            f"background: transparent; border: none;")
+        border = self._get_border_color()
+        self._icon.setStyleSheet(
+            f"border: 2px solid {border}; border-radius: 4px; "
+            f"background: rgba(12,12,20,200);")
+        # Update icon opacity
+        pm = get_icon(self._name, ICON_SIZE)
+        if pct == 0:
+            dark = QPixmap(pm.size())
+            dark.fill(QColor(0, 0, 0, 0))
+            p = QPainter(dark)
+            p.setOpacity(0.25)
+            p.drawPixmap(0, 0, pm)
+            p.end()
+            self._icon.setPixmap(dark)
+        else:
+            self._icon.setPixmap(pm)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self._row)
+        super().mousePressEvent(event)
 
 
 class ScanEditor(QWidget):
-    """Scan percentage table with search and batch operations."""
+    """Scan percentage editor with icon grid."""
 
-    data_changed = pyqtSignal()  # emitted when any scan value changes
+    data_changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._save_file = None
-        self._scan_entries = []  # list of (table_index, digi_id, scan_pct)
+        self._scan_entries = []
+        self._slots = []
         self._build_ui()
 
     def _build_ui(self):
@@ -63,13 +143,14 @@ class ScanEditor(QWidget):
             f"color: {ACCENT}; font-size: 14px; font-weight: bold;")
         layout.addWidget(header)
 
-        # Toolbar row
+        # Toolbar
         toolbar = QHBoxLayout()
         toolbar.setSpacing(6)
 
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search Digimon...")
-        self._search.textChanged.connect(self._filter_table)
+        self._search.setClearButtonEnabled(True)
+        self._search.textChanged.connect(self._filter)
         toolbar.addWidget(self._search, 1)
 
         btn_100 = QPushButton("Set All 100%")
@@ -86,23 +167,17 @@ class ScanEditor(QWidget):
 
         layout.addLayout(toolbar)
 
-        # Table
-        self._table = QTableWidget()
-        self._table.setColumnCount(4)
-        self._table.setHorizontalHeaderLabels(["", "Name", "ID", "Scan %"])
-        self._table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Stretch)
-        self._table.setColumnWidth(0, 32)
-        self._table.setColumnWidth(2, 50)
-        self._table.setColumnWidth(3, 80)
-        self._table.setAlternatingRowColors(True)
-        self._table.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectRows)
-        self._table.verticalHeader().setDefaultSectionSize(28)
-        self._table.verticalHeader().setVisible(False)
-        self._table.setItemDelegateForColumn(3, ScanSpinDelegate(self))
-        self._table.cellChanged.connect(self._on_cell_changed)
-        layout.addWidget(self._table)
+        # Scrollable grid
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        layout.addWidget(self._scroll)
+
+        self._container = QWidget()
+        self._grid_layout = QVBoxLayout(self._container)
+        self._grid_layout.setContentsMargins(4, 4, 4, 4)
+        self._grid_layout.setSpacing(4)
+        self._grid_layout.addStretch()
+        self._scroll.setWidget(self._container)
 
         # Summary
         self._summary = QLabel("")
@@ -110,7 +185,6 @@ class ScanEditor(QWidget):
         layout.addWidget(self._summary)
 
     def set_save_file(self, save_file):
-        """Load scan data from a SaveFile."""
         self._save_file = save_file
         self._load_scan_data()
 
@@ -118,7 +192,7 @@ class ScanEditor(QWidget):
         if not self._save_file:
             return
 
-        from save_data import get_digimon_name, _get_db
+        from save_data import _get_db
         db = _get_db()
         id_to_name = {}
         for row in db.execute("SELECT id, name FROM digimon"):
@@ -127,110 +201,181 @@ class ScanEditor(QWidget):
         self._scan_entries = []
         d = self._save_file._data
 
-        # Real scan table starts at index 130 (sorted by digi_id).
-        # Entries 0-129 are a different data structure (header/garbage).
         _REAL_START = 130
         for i in range(_REAL_START, 583):
             off = SCAN_TABLE_OFFSET + i * SCAN_TABLE_STRIDE
             digi_id = struct.unpack('<H', d[off:off + 2])[0]
             scan_pct = struct.unpack('<H', d[off + 2:off + 4])[0]
             if digi_id > 0 and digi_id in id_to_name:
-                scan_pct = min(scan_pct, 200)  # clamp stale values
-                self._scan_entries.append((i, digi_id, id_to_name[digi_id], scan_pct))
+                scan_pct = min(scan_pct, 200)
+                self._scan_entries.append(
+                    (i, digi_id, id_to_name[digi_id], scan_pct))
 
-        self._populate_table()
+        self._rebuild_grid()
 
-    def _populate_table(self):
-        self._table.blockSignals(True)
-        self._table.setRowCount(len(self._scan_entries))
+    def _rebuild_grid(self, filter_text=""):
+        self._slots.clear()
+        # Clear existing
+        while self._grid_layout.count() > 0:
+            item = self._grid_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+            elif item.layout():
+                sub = item.layout()
+                while sub.count() > 0:
+                    si = sub.takeAt(0)
+                    sw = si.widget()
+                    if sw:
+                        sw.deleteLater()
 
-        scanned = 0
+        # Split into scanned and unscanned
+        scanned = []
+        unscanned = []
         for row, (idx, digi_id, name, pct) in enumerate(self._scan_entries):
-            # Icon
-            icon_item = QTableWidgetItem()
-            from PyQt6.QtGui import QIcon
-            pm = get_icon(name, 24)
-            if not pm.isNull():
-                icon_item.setIcon(QIcon(pm))
-            icon_item.setFlags(icon_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self._table.setItem(row, 0, icon_item)
-
-            # Name
-            name_item = QTableWidgetItem(name)
-            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self._table.setItem(row, 1, name_item)
-
-            # ID
-            id_item = QTableWidgetItem(str(digi_id))
-            id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self._table.setItem(row, 2, id_item)
-
-            # Scan %
-            pct_item = QTableWidgetItem()
-            pct_item.setData(Qt.ItemDataRole.EditRole, pct)
-            pct_item.setData(Qt.ItemDataRole.DisplayRole, f"{pct}%")
-            pct_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            if pct >= 200:
-                pct_item.setForeground(QColor(STAT_FARM))
-            elif pct >= 100:
-                pct_item.setForeground(QColor(ACCENT))
-            elif pct > 0:
-                pct_item.setForeground(QColor(TEXT_VALUE))
-            self._table.setItem(row, 3, pct_item)
-
+            if filter_text and filter_text not in name.lower():
+                continue
             if pct > 0:
-                scanned += 1
+                scanned.append((row, idx, digi_id, name, pct))
+            else:
+                unscanned.append((row, idx, digi_id, name, pct))
 
-        self._table.blockSignals(False)
+        scanned_count = sum(1 for _, _, _, p in self._scan_entries if p > 0)
+        full_count = sum(1 for _, _, _, p in self._scan_entries if p >= 100)
+
+        # Scanned section
+        if scanned:
+            lbl = QLabel(f"Scanned ({len(scanned)})")
+            lbl.setStyleSheet(
+                f"color: {ACCENT}; font-weight: bold; font-size: 11px; "
+                f"letter-spacing: 1px; background: transparent;")
+            self._grid_layout.addWidget(lbl)
+            self._add_grid_section(scanned)
+
+        # Unscanned section
+        if unscanned:
+            lbl = QLabel(f"Not Scanned ({len(unscanned)})")
+            lbl.setStyleSheet(
+                f"color: {TEXT_SECONDARY}; font-weight: bold; font-size: 11px; "
+                f"letter-spacing: 1px; background: transparent;")
+            self._grid_layout.addWidget(lbl)
+            self._add_grid_section(unscanned)
+
+        self._grid_layout.addStretch()
+
         self._summary.setText(
             f"{len(self._scan_entries)} species  |  "
-            f"{scanned} scanned  |  "
-            f"{sum(1 for _, _, _, p in self._scan_entries if p >= 100)} at 100%+")
+            f"{scanned_count} scanned  |  {full_count} at 100%+")
 
-    def _on_cell_changed(self, row, col):
-        if col != 3 or not self._save_file:
-            return
+    def _add_grid_section(self, entries):
+        grid = QGridLayout()
+        grid.setSpacing(2)
+        for i, (row, idx, digi_id, name, pct) in enumerate(entries):
+            r = i // GRID_COLS
+            c = i % GRID_COLS
+            slot = ScanSlot(row, name, pct)
+            slot.clicked.connect(self._on_slot_clicked)
+            grid.addWidget(slot, r, c)
+            self._slots.append(slot)
+
+        wrapper = QWidget()
+        wrapper.setLayout(grid)
+        self._grid_layout.addWidget(wrapper)
+
+    def _on_slot_clicked(self, row):
         if row < 0 or row >= len(self._scan_entries):
             return
-        item = self._table.item(row, col)
-        if not item:
-            return
-        try:
-            new_pct = int(item.data(Qt.ItemDataRole.EditRole) or 0)
-        except (TypeError, ValueError):
-            return
-        new_pct = max(0, min(200, new_pct))  # clamp to valid range
-
         idx, digi_id, name, old_pct = self._scan_entries[row]
-        if new_pct != old_pct:
-            # Write to save data
-            off = SCAN_TABLE_OFFSET + idx * SCAN_TABLE_STRIDE + 2
-            struct.pack_into('<h', self._save_file._data, off, new_pct)
-            self._save_file._mark_dirty()
-            self._scan_entries[row] = (idx, digi_id, name, new_pct)
-            self.data_changed.emit()
 
-        # Always update display text and color (even if value unchanged)
-        self._table.blockSignals(True)
-        item.setData(Qt.ItemDataRole.DisplayRole, f"{new_pct}%")
-        if new_pct >= 200:
-            item.setForeground(QColor(STAT_FARM))
-        elif new_pct >= 100:
-            item.setForeground(QColor(ACCENT))
-        elif new_pct > 0:
-            item.setForeground(QColor(TEXT_VALUE))
-        else:
-            item.setForeground(QColor(TEXT_SECONDARY))
-        self._table.blockSignals(False)
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Edit Scan — {name}")
+        dlg.setFixedWidth(280)
+        dlg.setStyleSheet(f"""
+            QDialog {{ background: #0C0C14; color: #E0E0E0; }}
+            QLabel {{ color: #A0A0B0; }}
+            QSpinBox {{
+                background: #1A1A2E; color: #E0E0E0;
+                border: 1px solid {BORDER}; border-radius: 3px;
+                padding: 4px; font-size: 14px;
+            }}
+            QPushButton {{
+                background: #1A1A2E; color: #E0E0E0;
+                border: 1px solid {BORDER}; border-radius: 4px;
+                padding: 6px 16px;
+            }}
+            QPushButton:hover {{ border-color: {ACCENT}; color: {ACCENT}; }}
+        """)
+        dl = QVBoxLayout(dlg)
 
-    def _filter_table(self, text):
-        text = text.lower()
-        for row in range(self._table.rowCount()):
-            name_item = self._table.item(row, 1)
-            if name_item:
-                visible = text in name_item.text().lower() if text else True
-                self._table.setRowHidden(row, not visible)
+        # Icon + name
+        top = QHBoxLayout()
+        icon = QLabel()
+        icon.setPixmap(get_icon(name, 48))
+        icon.setFixedSize(52, 52)
+        top.addWidget(icon)
+        n = QLabel(name)
+        n.setStyleSheet(f"color: {TEXT_VALUE}; font-size: 14px; font-weight: bold;")
+        top.addWidget(n)
+        top.addStretch()
+        dl.addLayout(top)
+
+        spin = QSpinBox()
+        spin.setRange(0, 200)
+        spin.setValue(old_pct)
+        spin.setSuffix("%")
+        spin.setFixedHeight(32)
+        dl.addWidget(spin)
+
+        # Quick buttons
+        qrow = QHBoxLayout()
+        for val, label in [(0, "0%"), (100, "100%"), (200, "200%")]:
+            b = QPushButton(label)
+            b.clicked.connect(lambda _, v=val: spin.setValue(v))
+            qrow.addWidget(b)
+        dl.addLayout(qrow)
+
+        # OK/Cancel
+        brow = QHBoxLayout()
+        brow.addStretch()
+        ok = QPushButton("Save")
+        ok.setStyleSheet(f"""
+            QPushButton {{
+                background: #1B5E20; color: #81C784;
+                border: 1px solid #388E3C; border-radius: 4px;
+                padding: 6px 20px; font-weight: bold;
+            }}
+        """)
+        ok.clicked.connect(dlg.accept)
+        brow.addWidget(ok)
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dlg.reject)
+        brow.addWidget(cancel)
+        dl.addLayout(brow)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            new_pct = spin.value()
+            if new_pct != old_pct:
+                off = SCAN_TABLE_OFFSET + idx * SCAN_TABLE_STRIDE + 2
+                struct.pack_into('<h', self._save_file._data, off, new_pct)
+                self._save_file._mark_dirty()
+                self._scan_entries[row] = (idx, digi_id, name, new_pct)
+                # Update the slot widget if it still exists
+                for s in self._slots:
+                    if s._row == row:
+                        s.update_pct(new_pct)
+                        break
+                self.data_changed.emit()
+                self._update_summary()
+
+    def _update_summary(self):
+        scanned_count = sum(1 for _, _, _, p in self._scan_entries if p > 0)
+        full_count = sum(1 for _, _, _, p in self._scan_entries if p >= 100)
+        self._summary.setText(
+            f"{len(self._scan_entries)} species  |  "
+            f"{scanned_count} scanned  |  {full_count} at 100%+")
+
+    def _filter(self, text):
+        self._rebuild_grid(text.lower().strip())
 
     def _set_all(self, value):
         if not self._save_file:
@@ -243,18 +388,11 @@ class ScanEditor(QWidget):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        self._table.blockSignals(True)
         for row, (idx, digi_id, name, _) in enumerate(self._scan_entries):
             off = SCAN_TABLE_OFFSET + idx * SCAN_TABLE_STRIDE + 2
             struct.pack_into('<h', self._save_file._data, off, value)
             self._scan_entries[row] = (idx, digi_id, name, value)
 
-            item = self._table.item(row, 3)
-            if item:
-                item.setData(Qt.ItemDataRole.EditRole, value)
-                item.setData(Qt.ItemDataRole.DisplayRole, f"{value}%")
-
         self._save_file._mark_dirty()
-        self._table.blockSignals(False)
-        self._populate_table()
+        self._rebuild_grid()
         self.data_changed.emit()
