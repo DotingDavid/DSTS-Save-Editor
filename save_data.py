@@ -504,16 +504,45 @@ class SaveFile:
     # ── Clone ──
 
     def find_empty_slot(self):
-        """Find the first empty slot in the box region. Returns offset or None."""
+        """Find the first empty box slot at the correct stride alignment.
+
+        Uses the same dynamic base detection as read_roster to ensure
+        the new entry will be found on the next scan.
+        """
         d = self._data
-        # Box empty region: 0x009000-0x053000, stride 0x150
-        for offset in range(0x009004, 0x053000, 0x150):
-            # Check if db_id is 0 and name field is null
-            db_id = struct.unpack('<I', d[offset - 4:offset])[0]
-            if db_id == 0:
-                # Verify name is empty too
-                if d[offset:offset + 4] == b'\x00\x00\x00\x00':
-                    return offset
+        # Find stride base (same logic as read_roster)
+        pb_base = None
+        from save_data import _get_db
+        db = _get_db()
+        valid_ids = set()
+        for row in db.execute("SELECT id FROM digimon"):
+            valid_ids.add(row["id"])
+
+        for off in range(0x001000, 0x001000 + 0x150 * 20, 4):
+            db_id = struct.unpack('<I', d[off:off + 4])[0]
+            if db_id not in valid_ids:
+                continue
+            name_off = off + 4
+            if name_off + 0x64 > len(d):
+                continue
+            name_end = d.find(b'\x00', name_off, name_off + 32)
+            if name_end <= name_off:
+                continue
+            lv = struct.unpack('<i', d[name_off + 0x60:name_off + 0x64])[0]
+            if 1 <= lv <= 99:
+                pb_base = 0x001000 + ((off - 0x001000) % 0x150)
+                break
+
+        if pb_base is None:
+            pb_base = 0x001024  # fallback
+
+        # Scan stride-aligned slots starting after party (skip first ~8)
+        # Look for an empty slot (db_id == 0)
+        for db_off in range(pb_base + 8 * 0x150, 0x053000, 0x150):
+            name_off = db_off + 4
+            db_id = struct.unpack('<I', d[db_off:db_off + 4])[0]
+            if db_id == 0 and d[name_off:name_off + 4] == b'\x00\x00\x00\x00':
+                return name_off  # return name offset (consistent with struct layout)
         return None
 
     def clone_digimon(self, source_offset):

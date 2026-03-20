@@ -21,6 +21,47 @@ class SpeciesChooserDialog(QDialog):
         self._species = get_all_digimon_species()
         self.setWindowTitle("Choose Species")
         self.setMinimumSize(500, 600)
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: #0C0C14;
+                color: #A0A0B0;
+            }}
+            QLineEdit {{
+                background-color: #1A1A2E;
+                color: #E0E0E0;
+                border: 1px solid {BORDER};
+                border-radius: 3px;
+                padding: 4px 8px;
+            }}
+            QTableWidget {{
+                background-color: #0C0C14;
+                alternate-background-color: #12121E;
+                color: #E0E0E0;
+                gridline-color: {BORDER};
+                border: 1px solid {BORDER};
+            }}
+            QTableWidget::item:selected {{
+                background-color: rgba(0,191,255,0.2);
+            }}
+            QHeaderView::section {{
+                background-color: #1A1A2E;
+                color: #A0A0B0;
+                border: 1px solid {BORDER};
+                padding: 3px;
+            }}
+            QLabel {{ color: #A0A0B0; }}
+            QPushButton {{
+                background-color: #1A1A2E;
+                color: #E0E0E0;
+                border: 1px solid {BORDER};
+                border-radius: 4px;
+                padding: 6px 16px;
+            }}
+            QPushButton:hover {{
+                border-color: {ACCENT};
+                color: {ACCENT};
+            }}
+        """)
         self._build_ui()
         self._populate()
 
