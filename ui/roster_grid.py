@@ -156,6 +156,15 @@ class RosterGrid(QWidget):
         self._sort_combo.setFixedWidth(110)
         toolbar.addWidget(self._sort_combo)
 
+        filter_label = QLabel("Show:")
+        filter_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
+        toolbar.addWidget(filter_label)
+        self._filter_combo = QComboBox()
+        self._filter_combo.addItems(["All", "Party", "Box", "Farm"])
+        self._filter_combo.setFixedWidth(80)
+        self._filter_combo.currentIndexChanged.connect(self._on_filter_changed)
+        toolbar.addWidget(self._filter_combo)
+
         self._create_btn = QPushButton("+ Create")
         self._create_btn.setFixedHeight(24)
         self._create_btn.setStyleSheet(f"""
@@ -191,6 +200,9 @@ class RosterGrid(QWidget):
         self._sort_combo.blockSignals(True)
         self._sort_combo.setCurrentIndex(0)
         self._sort_combo.blockSignals(False)
+        self._filter_combo.blockSignals(True)
+        self._filter_combo.setCurrentIndex(0)
+        self._filter_combo.blockSignals(False)
         self._rebuild_grid(roster)
 
     def _rebuild_grid(self, roster):
@@ -263,16 +275,29 @@ class RosterGrid(QWidget):
             self._current_slot = sender
         self.digimon_selected.emit(entry)
 
+    def _apply_filters(self):
+        """Apply search text and location filter, then rebuild."""
+        roster = list(self._roster)
+        # Location filter
+        loc_idx = self._filter_combo.currentIndex()
+        loc_map = {1: "party", 2: "box", 3: "farm"}
+        if loc_idx in loc_map:
+            roster = [e for e in roster if e.get("location") == loc_map[loc_idx]]
+        # Search filter
+        text = self._search.text().lower().strip()
+        if text:
+            roster = [e for e in roster
+                      if text in (e.get("nickname") or e["species"]).lower()
+                      or text in e["species"].lower()]
+        self._rebuild_grid(roster)
+
     def _filter(self, text):
         """Filter grid by search text."""
-        text = text.lower().strip()
-        if not text:
-            self._rebuild_grid(self._roster)
-            return
-        filtered = [e for e in self._roster
-                    if text in (e.get("nickname") or e["species"]).lower()
-                    or text in e["species"].lower()]
-        self._rebuild_grid(filtered)
+        self._apply_filters()
+
+    def _on_filter_changed(self, idx):
+        """Filter by location."""
+        self._apply_filters()
 
     def _on_sort_changed(self, idx):
         """Sort grid by selected criteria."""

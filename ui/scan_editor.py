@@ -150,8 +150,27 @@ class ScanEditor(QWidget):
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search Digimon...")
         self._search.setClearButtonEnabled(True)
-        self._search.textChanged.connect(self._filter)
+        self._search.textChanged.connect(self._on_toolbar_changed)
         toolbar.addWidget(self._search, 1)
+
+        from PyQt6.QtWidgets import QComboBox
+        sort_label = QLabel("Sort:")
+        sort_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
+        toolbar.addWidget(sort_label)
+        self._sort_combo = QComboBox()
+        self._sort_combo.addItems(["Scan % ↓", "Scan % ↑", "Name", "ID"])
+        self._sort_combo.setFixedWidth(100)
+        self._sort_combo.currentIndexChanged.connect(self._on_toolbar_changed)
+        toolbar.addWidget(self._sort_combo)
+
+        filter_label = QLabel("Show:")
+        filter_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
+        toolbar.addWidget(filter_label)
+        self._filter_combo = QComboBox()
+        self._filter_combo.addItems(["All", "Scanned", "Not Scanned", "100%+", "Under 100%"])
+        self._filter_combo.setFixedWidth(110)
+        self._filter_combo.currentIndexChanged.connect(self._on_toolbar_changed)
+        toolbar.addWidget(self._filter_combo)
 
         btn_100 = QPushButton("Set All 100%")
         btn_100.clicked.connect(lambda: self._set_all(100))
@@ -213,7 +232,10 @@ class ScanEditor(QWidget):
 
         self._rebuild_grid()
 
-    def _rebuild_grid(self, filter_text=""):
+    def _on_toolbar_changed(self, *_):
+        self._rebuild_grid()
+
+    def _rebuild_grid(self):
         self._slots.clear()
         # Clear existing
         while self._grid_layout.count() > 0:
@@ -229,37 +251,46 @@ class ScanEditor(QWidget):
                     if sw:
                         sw.deleteLater()
 
-        # Split into scanned and unscanned
-        scanned = []
-        unscanned = []
+        # Apply search filter
+        search = self._search.text().lower().strip()
+        entries = []
         for row, (idx, digi_id, name, pct) in enumerate(self._scan_entries):
-            if filter_text and filter_text not in name.lower():
+            if search and search not in name.lower():
                 continue
-            if pct > 0:
-                scanned.append((row, idx, digi_id, name, pct))
-            else:
-                unscanned.append((row, idx, digi_id, name, pct))
+            entries.append((row, idx, digi_id, name, pct))
+
+        # Apply show filter
+        show_idx = self._filter_combo.currentIndex()
+        if show_idx == 1:  # Scanned
+            entries = [e for e in entries if e[4] > 0]
+        elif show_idx == 2:  # Not Scanned
+            entries = [e for e in entries if e[4] == 0]
+        elif show_idx == 3:  # 100%+
+            entries = [e for e in entries if e[4] >= 100]
+        elif show_idx == 4:  # Under 100%
+            entries = [e for e in entries if e[4] < 100]
+
+        # Apply sort
+        sort_idx = self._sort_combo.currentIndex()
+        if sort_idx == 0:  # Scan % desc (default)
+            entries.sort(key=lambda e: e[4], reverse=True)
+        elif sort_idx == 1:  # Scan % asc
+            entries.sort(key=lambda e: e[4])
+        elif sort_idx == 2:  # Name
+            entries.sort(key=lambda e: e[3].lower())
+        elif sort_idx == 3:  # ID
+            entries.sort(key=lambda e: e[2])
 
         scanned_count = sum(1 for _, _, _, p in self._scan_entries if p > 0)
         full_count = sum(1 for _, _, _, p in self._scan_entries if p >= 100)
 
-        # Scanned section
-        if scanned:
-            lbl = QLabel(f"Scanned ({len(scanned)})")
-            lbl.setStyleSheet(
-                f"color: {ACCENT}; font-weight: bold; font-size: 11px; "
-                f"letter-spacing: 1px; background: transparent;")
-            self._grid_layout.addWidget(lbl)
-            self._add_grid_section(scanned)
-
-        # Unscanned section
-        if unscanned:
-            lbl = QLabel(f"Not Scanned ({len(unscanned)})")
-            lbl.setStyleSheet(
-                f"color: {TEXT_SECONDARY}; font-weight: bold; font-size: 11px; "
-                f"letter-spacing: 1px; background: transparent;")
-            self._grid_layout.addWidget(lbl)
-            self._add_grid_section(unscanned)
+        if entries:
+            count_lbl = QLabel(f"Showing {len(entries)}")
+            count_lbl.setStyleSheet(
+                f"color: {TEXT_SECONDARY}; font-size: 10px; "
+                f"background: transparent;")
+            self._grid_layout.addWidget(count_lbl)
+            self._add_grid_section(entries)
 
         self._grid_layout.addStretch()
 
@@ -373,9 +404,6 @@ class ScanEditor(QWidget):
         self._summary.setText(
             f"{len(self._scan_entries)} species  |  "
             f"{scanned_count} scanned  |  {full_count} at 100%+")
-
-    def _filter(self, text):
-        self._rebuild_grid(text.lower().strip())
 
     def _set_all(self, value):
         if not self._save_file:
