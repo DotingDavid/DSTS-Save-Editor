@@ -222,7 +222,17 @@ class SaveFile:
                                                      row["def_"], row["int_"],
                                                      row["spi"], row["spd"]]
 
-        for offset in range(8, len(d) - 0x150, 4):
+        # Scan only known roster regions at correct strides
+        # Party+box: db_id at 0x001024, stride 0x150 (36-byte header in region)
+        # Farm:      db_id at 0x053074, stride 0x158 (116-byte header in region)
+        # Name field is always db_id + 4
+        scan_offsets = []
+        for db_off in range(0x001024, 0x053000, 0x150):
+            scan_offsets.append((db_off + 4, "party_box"))
+        for db_off in range(0x053074, 0x05C000, 0x158):
+            scan_offsets.append((db_off + 4, "farm"))
+
+        for offset, region in scan_offsets:
             db_id = struct.unpack('<I', d[offset - 4:offset])[0]
             info = id_to_info.get(db_id)
             if not info:
@@ -283,13 +293,11 @@ class SaveFile:
             nickname = entry_name if entry_name != info["name"] else None
 
             # Determine location (party vs box vs farm)
-            if 0x001000 <= offset < 0x009000:
-                active_flag = struct.unpack('<I', d[offset + 0x11C:offset + 0x120])[0]
-                location = "party" if active_flag == 1 else "box"
-            elif 0x053000 <= offset < 0x060000:
+            if region == "farm":
                 location = "farm"
             else:
-                location = "unknown"
+                active_flag = struct.unpack('<I', d[offset + 0x11C:offset + 0x120])[0]
+                location = "party" if active_flag == 1 else "box"
 
             # Evolution history
             evo_history = []
@@ -337,21 +345,23 @@ class SaveFile:
             }
             results.append(entry)
 
-        # Dedup by creation hash (farm entries can appear twice)
-        seen_hashes = {}
+        # Dedup by (creation_hash, species) — only merge true duplicates,
+        # not different Digimon that happen to share a hash
+        seen = {}
         deduped = []
         for entry in results:
             h = entry["creation_hash"]
+            key = (h, entry["db_id"])
             if h and h > 0x10:
-                if h in seen_hashes:
-                    prev = seen_hashes[h]
+                if key in seen:
+                    prev = seen[key]
                     prev_total = sum(prev["total"].values())
                     cur_total = sum(entry["total"].values())
                     if cur_total > prev_total:
                         deduped[deduped.index(prev)] = entry
-                        seen_hashes[h] = entry
+                        seen[key] = entry
                 else:
-                    seen_hashes[h] = entry
+                    seen[key] = entry
                     deduped.append(entry)
             else:
                 deduped.append(entry)
