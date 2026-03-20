@@ -26,7 +26,8 @@ class _Cell(QSpinBox):
         self.setRange(-99999, 99999)
         self.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setFixedWidth(70)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
         self.setStyleSheet(f"""
             QSpinBox {{
                 background: transparent;
@@ -100,19 +101,26 @@ class StatEditor(QWidget):
 
         layout.addLayout(bar_grid)
 
-        # ── Table fills remaining space ──
+        # ── Table fills remaining height, constrained width ──
+        table_wrapper = QHBoxLayout()
+        table_wrapper.addStretch()
+
         table = QGridLayout()
         table.setSpacing(0)
         table.setContentsMargins(0, 0, 0, 0)
 
-        # Make all data rows stretch equally
+        # Rows stretch vertically to fill space
         for r in range(1, 8):
             table.setRowStretch(r, 1)
 
-        # Column stretches
-        table.setColumnMinimumWidth(0, 42)
-        for c in range(1, 6):
-            table.setColumnStretch(c, 1)
+        # Fixed column widths — no stretching horizontally
+        table.setColumnFixedWidth = None  # not a real method, use minimums
+        table.setColumnMinimumWidth(0, 40)   # stat name
+        table.setColumnMinimumWidth(1, 65)   # base
+        table.setColumnMinimumWidth(2, 70)   # growth
+        table.setColumnMinimumWidth(3, 70)   # farm
+        table.setColumnMinimumWidth(4, 70)   # blue
+        table.setColumnMinimumWidth(5, 65)   # total
 
         # Column headers
         headers = [("", TEXT_SECONDARY), ("Base", STAT_BASE),
@@ -188,7 +196,9 @@ class StatEditor(QWidget):
             self._total_labels[key] = total
             table.addWidget(total, row, 5)
 
-        layout.addLayout(table, 1)  # stretch factor 1 = fills remaining
+        table_wrapper.addLayout(table)
+        table_wrapper.addStretch()
+        layout.addLayout(table_wrapper, 1)  # stretch factor 1 = fills remaining height
 
     def set_entry(self, entry):
         self._updating = True
