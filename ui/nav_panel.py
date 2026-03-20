@@ -272,7 +272,7 @@ class NavPanel(QWidget):
         layout.addStretch()
 
         # ── Version footer ──
-        ver = QLabel("ANAMNESIS Save Editor v0.2.0")
+        ver = QLabel("ANAMNESIS Save Editor v0.3.0")
         ver.setStyleSheet(
             f"color: rgba(136,136,170,0.4); font-size: 8px; "
             f"background: transparent; padding: 6px;")

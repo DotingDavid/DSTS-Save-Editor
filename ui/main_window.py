@@ -123,7 +123,7 @@ class MainWindow(QMainWindow):
         tb.addWidget(spacer)
 
         # Version
-        ver = QLabel("  ANAMNESIS Save Editor v0.2.0  ")
+        ver = QLabel("  ANAMNESIS Save Editor v0.3.0  ")
         ver.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
         tb.addWidget(ver)
 

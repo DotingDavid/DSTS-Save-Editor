@@ -684,7 +684,7 @@ class SaveFile:
 
         return {
             "format_version": 1,
-            "editor_version": "0.1.0",
+            "editor_version": "0.3.0",
             "species": get_digimon_name(db_id),
             "db_id": db_id,
             "display_name": display_name,
