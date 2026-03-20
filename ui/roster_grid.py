@@ -171,6 +171,12 @@ class RosterGrid(QWidget):
     def set_roster(self, roster):
         """Populate grid with Digimon entries."""
         self._roster = roster
+        self._search.blockSignals(True)
+        self._search.clear()
+        self._search.blockSignals(False)
+        self._sort_combo.blockSignals(True)
+        self._sort_combo.setCurrentIndex(0)
+        self._sort_combo.blockSignals(False)
         self._rebuild_grid(roster)
 
     def _rebuild_grid(self, roster):
