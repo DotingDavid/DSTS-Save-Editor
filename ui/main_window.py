@@ -1,4 +1,4 @@
-"""Main application window for the ANAMNESIS Save Editor.
+"""Main application window for the ANAMNESIS SE.
 
 Left nav panel + center content area (stacked views).
 """
@@ -52,7 +52,7 @@ class MainWindow(QMainWindow):
         self._roster = []
         self._current_entry = None
 
-        self.setWindowTitle("ANAMNESIS Save Editor")
+        self.setWindowTitle("ANAMNESIS SE")
         self.resize(1280, 800)
         self.setMinimumSize(1024, 700)
 
@@ -123,7 +123,7 @@ class MainWindow(QMainWindow):
         tb.addWidget(spacer)
 
         # Version
-        ver = QLabel("  ANAMNESIS Save Editor v0.3.0  ")
+        ver = QLabel("  ANAMNESIS SE v0.3.0  ")
         ver.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
         tb.addWidget(ver)
 
