@@ -11,7 +11,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from ui.style import (ACCENT, ACCENT_DIM, TEXT_PRIMARY, TEXT_SECONDARY,
                        TEXT_VALUE, BG_PANEL, BG_INPUT, BG_HOVER, BORDER,
                        STAT_FARM, STAT_BLUE)
-from save_data import find_save_directory, list_save_slots
+from save_data import find_save_directory, find_all_save_directories, list_save_slots
 
 
 # ── Shared styled helpers ──
@@ -109,6 +109,7 @@ class NavPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._buttons = {}
+        self._all_accounts = find_all_save_directories()
         self._save_dir = find_save_directory()
         self._build_ui()
 
@@ -123,6 +124,29 @@ class NavPanel(QWidget):
         slot_layout = QVBoxLayout(slot_section)
         slot_layout.setContentsMargins(10, 0, 10, 6)
         slot_layout.setSpacing(4)
+
+        # Account selector (only shown when multiple Steam accounts)
+        if len(self._all_accounts) > 1:
+            self._account_combo = QComboBox()
+            self._account_combo.setFixedHeight(24)
+            self._account_combo.setStyleSheet(f"""
+                QComboBox {{
+                    background: {BG_INPUT}; color: {TEXT_SECONDARY};
+                    border: 1px solid {BORDER}; border-radius: 3px;
+                    font-size: 10px; padding: 2px 6px;
+                }}
+            """)
+            for steam_id, path, player_name in self._all_accounts:
+                slots = list_save_slots(path)
+                label = f"{player_name} ({len(slots)} saves)"
+                self._account_combo.addItem(label, path)
+            # Select current account
+            for i, (_, path, _) in enumerate(self._all_accounts):
+                if path == self._save_dir:
+                    self._account_combo.setCurrentIndex(i)
+                    break
+            self._account_combo.currentIndexChanged.connect(self._on_account_changed)
+            slot_layout.addWidget(self._account_combo)
 
         self._combo = QComboBox()
         self._combo.setMaxVisibleItems(16)
@@ -260,6 +284,14 @@ class NavPanel(QWidget):
         for slot_num, path, mtime in slots:
             dt = datetime.fromtimestamp(mtime).strftime("%b %d, %H:%M")
             self._combo.addItem(f"Slot {slot_num:04d}  —  {dt}", path)
+
+    def _on_account_changed(self, idx):
+        """Switch to a different Steam account's saves."""
+        if hasattr(self, '_account_combo') and idx >= 0:
+            path = self._account_combo.itemData(idx)
+            if path:
+                self._save_dir = path
+                self._populate_slots()
 
     def _on_load(self):
         idx = self._combo.currentIndex()

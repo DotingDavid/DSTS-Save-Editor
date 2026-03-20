@@ -103,19 +103,71 @@ def get_item_name(item_id):
 # ── Save file discovery ────────────────────────────────────────────
 
 def find_save_directory():
-    """Find the game's save directory. Returns path or None."""
+    """Find the game's save directory. Returns path or None.
+
+    If multiple Steam accounts exist, returns the most recently modified one.
+    Use find_all_save_directories() to get all of them.
+    """
+    dirs = find_all_save_directories()
+    if not dirs:
+        return None
+    if len(dirs) == 1:
+        return dirs[0][1]
+    # Return the one with the most recent save file
+    best = None
+    best_mtime = 0
+    for steam_id, path, _ in dirs:
+        slots = list_save_slots(path)
+        if slots:
+            latest = max(s[2] for s in slots)
+            if latest > best_mtime:
+                best_mtime = latest
+                best = path
+    return best or dirs[0][1]
+
+
+def find_all_save_directories():
+    """Find all Steam user save directories.
+
+    Returns list of (steam_id, path, player_name) tuples.
+    player_name is read from the most recent save's header.
+    """
     steam_base = os.path.join(
         os.environ.get('ProgramFiles(x86)', ''),
         'Steam', 'steamapps', 'common',
         'Digimon Story Time Stranger', 'gamedata', 'savedata'
     )
+    results = []
     if os.path.isdir(steam_base):
-        # Find the Steam user ID subdirectory
-        subdirs = [d for d in os.listdir(steam_base)
-                   if os.path.isdir(os.path.join(steam_base, d)) and d.isdigit()]
-        if subdirs:
-            return os.path.join(steam_base, subdirs[0])
-    return None
+        subdirs = sorted(
+            [d for d in os.listdir(steam_base)
+             if os.path.isdir(os.path.join(steam_base, d)) and d.isdigit()])
+        for d in subdirs:
+            path = os.path.join(steam_base, d)
+            player_name = _read_player_name(path)
+            results.append((d, path, player_name))
+    return results
+
+
+def _read_player_name(save_dir):
+    """Read the player name from the most recent save file's header."""
+    slots = list_save_slots(save_dir)
+    if not slots:
+        return "Unknown"
+    # Use most recent slot
+    _, best_path, _ = max(slots, key=lambda s: s[2])
+    try:
+        with open(best_path, 'rb') as f:
+            raw = f.read()
+        data = save_crypto.decrypt(raw)
+        # Header is plaintext CSV, player name is field 4 (0-indexed)
+        header = data[:200].split(b'\x00')[0].decode('ascii', errors='replace')
+        parts = [p.strip() for p in header.split(',')]
+        if len(parts) > 4:
+            return parts[4].strip()
+    except Exception:
+        pass
+    return "Unknown"
 
 
 def list_save_slots(save_dir):
