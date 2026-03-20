@@ -84,6 +84,18 @@ class IdentityEditor(QWidget):
         meta_row.addStretch()
         info.addLayout(meta_row)
 
+        # Personality dropdown on main card
+        pers_row = QHBoxLayout()
+        pers_row.setSpacing(6)
+        self._pers_combo = QComboBox()
+        for pid, pname in sorted(PERSONALITY_NAMES.items()):
+            cat = PERS_CATEGORY.get(pid, "Valor")
+            self._pers_combo.addItem(f"{pname}  ({cat})", pid)
+        self._pers_combo.setFixedHeight(22)
+        self._pers_combo.currentIndexChanged.connect(self._on_pers_changed)
+        pers_row.addWidget(self._pers_combo)
+        pers_row.addStretch()
+
         self._change_btn = QPushButton("Change Species...")
         self._change_btn.setFixedWidth(120)
         self._change_btn.setFixedHeight(22)
@@ -96,7 +108,8 @@ class IdentityEditor(QWidget):
             QPushButton:hover {{ color: {ACCENT}; border-color: {ACCENT}; }}
         """)
         self._change_btn.clicked.connect(self._on_change_species)
-        info.addWidget(self._change_btn)
+        pers_row.addWidget(self._change_btn)
+        info.addLayout(pers_row)
 
         header.addLayout(info)
         header.addStretch()
@@ -143,23 +156,14 @@ class IdentityEditor(QWidget):
         self._exp_spin.valueChanged.connect(lambda v: self._emit("exp", v))
         grid.addWidget(self._exp_spin, 0, 3)
 
-        # Row 1: Personality
-        grid.addWidget(_label("Personality:"), 1, 0)
-        self._pers_combo = QComboBox()
-        for pid, pname in sorted(PERSONALITY_NAMES.items()):
-            cat = PERS_CATEGORY.get(pid, "Valor")
-            self._pers_combo.addItem(f"{pname}  ({cat})", pid)
-        self._pers_combo.currentIndexChanged.connect(self._on_pers_changed)
-        grid.addWidget(self._pers_combo, 1, 1, 1, 3)
-
-        # Row 2: Talent + Bond
-        grid.addWidget(_label("Talent:"), 2, 0)
+        # Row 1: Talent + Bond
+        grid.addWidget(_label("Talent:"), 1, 0)
         self._talent_spin = QSpinBox()
         self._talent_spin.setRange(0, 200)
         self._talent_spin.valueChanged.connect(lambda v: self._emit("talent", v))
-        grid.addWidget(self._talent_spin, 2, 1)
+        grid.addWidget(self._talent_spin, 1, 1)
 
-        grid.addWidget(_label("Bond:"), 2, 2)
+        grid.addWidget(_label("Bond:"), 1, 2)
         bond_w = QHBoxLayout()
         self._bond_slider = QSlider(Qt.Orientation.Horizontal)
         self._bond_slider.setRange(0, 100)
@@ -172,10 +176,10 @@ class IdentityEditor(QWidget):
             f"border: none; background: transparent;")
         self._bond_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         bond_w.addWidget(self._bond_label)
-        grid.addLayout(bond_w, 2, 3)
+        grid.addLayout(bond_w, 1, 3)
 
-        # Row 3: HP + SP
-        grid.addWidget(_label("HP:", "#E57373"), 3, 0)
+        # Row 2: HP + SP
+        grid.addWidget(_label("HP:", "#E57373"), 2, 0)
         hp_w = QHBoxLayout()
         self._hp_spin = QSpinBox()
         self._hp_spin.setRange(0, 99_999)
@@ -185,9 +189,9 @@ class IdentityEditor(QWidget):
         self._hp_max.setStyleSheet(
             f"color: {TEXT_SECONDARY}; font-size: 10px; border: none; background: transparent;")
         hp_w.addWidget(self._hp_max)
-        grid.addLayout(hp_w, 3, 1)
+        grid.addLayout(hp_w, 2, 1)
 
-        grid.addWidget(_label("SP:", "#CE93D8"), 3, 2)
+        grid.addWidget(_label("SP:", "#CE93D8"), 2, 2)
         sp_w = QHBoxLayout()
         self._sp_spin = QSpinBox()
         self._sp_spin.setRange(0, 99_999)
@@ -197,7 +201,7 @@ class IdentityEditor(QWidget):
         self._sp_max.setStyleSheet(
             f"color: {TEXT_SECONDARY}; font-size: 10px; border: none; background: transparent;")
         sp_w.addWidget(self._sp_max)
-        grid.addLayout(sp_w, 3, 3)
+        grid.addLayout(sp_w, 2, 3)
 
         core_layout.addLayout(grid)
         layout.addWidget(core_card)
