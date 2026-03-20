@@ -229,7 +229,6 @@ class RosterGrid(QWidget):
         for entry in roster:
             loc = entry.get("location", "box")
             groups.get(loc, groups["box"]).append(entry)
-        groups["box"].reverse()
 
         section_config = [
             ("party", f"Party ({len(groups['party'])})", ACCENT),
@@ -292,7 +291,9 @@ class RosterGrid(QWidget):
 
         # Sort non-party entries
         sort_idx = self._sort_combo.currentIndex()
-        if sort_idx == 1:  # Name
+        if sort_idx == 0:  # Default — reverse box to match in-game order
+            others.reverse()
+        elif sort_idx == 1:  # Name
             others.sort(key=lambda e: (e.get("nickname") or e["species"]).lower())
         elif sort_idx == 2:  # Level desc
             others.sort(key=lambda e: e["level"], reverse=True)
