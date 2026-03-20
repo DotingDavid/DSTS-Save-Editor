@@ -26,7 +26,7 @@ class _Cell(QSpinBox):
         self.setRange(-99999, 99999)
         self.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setFixedWidth(70)
+        self.setFixedWidth(55)
         self.setMaximumHeight(30)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.setStyleSheet(f"""
@@ -80,7 +80,7 @@ class StatEditor(QWidget):
         bar_grid = QGridLayout()
         bar_grid.setSpacing(1)
         bar_grid.setColumnMinimumWidth(0, 32)
-        bar_grid.setColumnMinimumWidth(1, 400)
+        bar_grid.setColumnMinimumWidth(1, 280)
         bar_grid.setColumnMinimumWidth(2, 36)
 
         for row, (key, label) in enumerate(zip(STAT_KEYS, STAT_LABELS)):
@@ -119,12 +119,12 @@ class StatEditor(QWidget):
 
         # Fixed column widths — no stretching horizontally
         table.setColumnFixedWidth = None  # not a real method, use minimums
-        table.setColumnMinimumWidth(0, 40)   # stat name
-        table.setColumnMinimumWidth(1, 65)   # base
-        table.setColumnMinimumWidth(2, 70)   # growth
-        table.setColumnMinimumWidth(3, 70)   # farm
-        table.setColumnMinimumWidth(4, 70)   # blue
-        table.setColumnMinimumWidth(5, 65)   # total
+        table.setColumnMinimumWidth(0, 36)   # stat name
+        table.setColumnMinimumWidth(1, 55)   # base
+        table.setColumnMinimumWidth(2, 60)   # growth
+        table.setColumnMinimumWidth(3, 55)   # farm
+        table.setColumnMinimumWidth(4, 55)   # blue
+        table.setColumnMinimumWidth(5, 55)   # total
 
         # Column headers
         headers = [("", TEXT_SECONDARY), ("Base", STAT_BASE),
