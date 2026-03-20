@@ -76,7 +76,6 @@ class StatEditor(QWidget):
         # ── Compact bars at top ──
         bar_wrapper = QHBoxLayout()
         bar_wrapper.setContentsMargins(0, 0, 0, 0)
-        bar_wrapper.addStretch(1)
 
         bar_grid = QGridLayout()
         bar_grid.setSpacing(1)
@@ -105,13 +104,12 @@ class StatEditor(QWidget):
             bar_grid.addWidget(total, row, 2)
 
         bar_wrapper.addLayout(bar_grid)
-        bar_wrapper.addStretch(1)
+        bar_wrapper.addStretch()
         layout.addLayout(bar_wrapper)
 
         # ── Table fills remaining height, constrained width ──
         table_wrapper = QHBoxLayout()
         table_wrapper.setContentsMargins(0, 0, 0, 0)
-        table_wrapper.addStretch(1)
 
         table = QGridLayout()
         table.setSpacing(0)
@@ -203,7 +201,7 @@ class StatEditor(QWidget):
             table.addWidget(total, row, 5)
 
         table_wrapper.addLayout(table)
-        table_wrapper.addStretch(1)
+        table_wrapper.addStretch()
         layout.addLayout(table_wrapper)
         layout.addStretch()
 
