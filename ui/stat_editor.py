@@ -68,12 +68,12 @@ class StatEditor(QWidget):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(4)
+        layout.setContentsMargins(10, 4, 10, 4)
+        layout.setSpacing(2)
 
         # ── Compact bars at top ──
         bar_grid = QGridLayout()
-        bar_grid.setSpacing(2)
+        bar_grid.setSpacing(1)
         bar_grid.setColumnMinimumWidth(0, 32)
         bar_grid.setColumnStretch(1, 1)
         bar_grid.setColumnMinimumWidth(2, 40)
@@ -92,7 +92,7 @@ class StatEditor(QWidget):
 
             total = QLabel("—")
             total.setStyleSheet(
-                f"color: {TEXT_VALUE}; font-size: 10px; font-weight: bold; "
+                f"color: {TEXT_SECONDARY}; font-size: 9px; "
                 f"background: transparent;")
             total.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self._bar_totals[key] = total
@@ -103,6 +103,7 @@ class StatEditor(QWidget):
         # ── Table fills remaining space ──
         table = QGridLayout()
         table.setSpacing(0)
+        table.setContentsMargins(0, 0, 0, 0)
 
         # Make all data rows stretch equally
         for r in range(1, 8):
@@ -123,7 +124,7 @@ class StatEditor(QWidget):
                 f"color: {color}; font-size: 10px; font-weight: bold; "
                 f"background: transparent;")
             h.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            h.setFixedHeight(20)
+            h.setFixedHeight(16)
             table.addWidget(h, 0, col)
 
         # Data rows
