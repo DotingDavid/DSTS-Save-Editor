@@ -437,8 +437,9 @@ class SaveFile:
             entry["location"] = "party" if i < 6 else "box"
 
         # Remove stale farm copies of party members.
-        # When the game moves a Digimon from farm to party, it doesn't
-        # always clear the farm slot. Detect by species + level match.
+        # When Digimon move from farm to party, the game doesn't
+        # always clear the farm slot. Only match against party —
+        # farm + box can legitimately have same species at same level.
         party_set = set()
         for e in results:
             if e["location"] == "party":
@@ -447,8 +448,7 @@ class SaveFile:
                    if e["location"] != "farm"
                    or (e["db_id"], e["level"]) not in party_set]
 
-        # Dedup by (creation_hash, species) — only merge true duplicates,
-        # not different Digimon that happen to share a hash
+        # Dedup by (creation_hash, species) — only merge true duplicates
         seen = {}
         deduped = []
         for entry in results:
