@@ -378,7 +378,11 @@ class SaveFile:
             if region == "farm":
                 farm_hash = struct.unpack('<I', d[offset + 0x150:offset + 0x154])[0]
                 if farm_hash < 0x100:
-                    continue  # ghost/stale farm entry (no valid hash)
+                    # Hash is zero/low — check if entry is real via training data
+                    training_status = struct.unpack('<I', d[offset + 0xD8:offset + 0xDC])[0]
+                    bond_raw = struct.unpack('<f', d[offset + 0x13C:offset + 0x140])[0]
+                    if training_status == 0 and bond_raw == 0:
+                        continue  # truly stale — no hash, no training, no bond
                 creation_hash = farm_hash
             else:
                 creation_hash = struct.unpack('<I', d[offset + 0x148:offset + 0x14C])[0]
