@@ -306,13 +306,14 @@ class SaveFile:
     def read_roster(self):
         """Read all Digimon entries from the save file.
 
-        Returns list of dicts with all parsed fields.
+        Scan order: farm first (authoritative), then party/box.
+        Party/box entries that match a farm entry by (db_id, talent)
+        are stale ghosts and get skipped — no dedup passes needed.
         """
-        results = []
         d = self._data
         stat_names = ['hp', 'sp', 'atk', 'def', 'int', 'spi', 'spd']
 
-        # Pre-build lookup of all valid Digimon IDs (avoids per-offset DB queries)
+        # Pre-build lookup of all valid Digimon IDs
         db = _get_db()
         id_to_info = {}
         for row in db.execute("SELECT id, name, stage, attribute, type FROM digimon"):
@@ -323,191 +324,54 @@ class SaveFile:
                                                      row["def_"], row["int_"],
                                                      row["spi"], row["spd"]]
 
-        scan_offsets = []
+        # ── Phase 1: Scan farm (authoritative) ──
+        farm_entries = []
+        farm_identity = set()   # (db_id, talent) — used to reject stale party/box ghosts
+        seen_farm_hash = set()  # within-farm dedup
 
-        # Party+box: 0x001000-0x053000, stride 0x150
-        pb_base = self._find_stride_base(0x001000, 0x009000, 0x150, id_to_info)
-        if pb_base is not None:
-            for db_off in range(pb_base, 0x053000, 0x150):
-                scan_offsets.append((db_off + 4, "party_box"))
-
-        # Farm: 0x053000-0x05C000, stride 0x158
         fm_base = self._find_stride_base(0x053000, 0x055000, 0x158, id_to_info)
         if fm_base is not None:
             for db_off in range(fm_base, 0x05C000, 0x158):
-                scan_offsets.append((db_off + 4, "farm"))
-
-        for offset, region in scan_offsets:
-            db_id = struct.unpack('<I', d[offset - 4:offset])[0]
-            info = id_to_info.get(db_id)
-            if not info:
-                continue
-
-            name_end = d.find(b'\x00', offset, offset + 32)
-            if name_end <= offset:
-                continue
-            try:
-                entry_name = d[offset:name_end].decode('ascii')
-            except (UnicodeDecodeError, ValueError):
-                continue
-            if not entry_name or len(entry_name) < 2:
-                continue
-
-            lv = struct.unpack('<i', d[offset + 0x60:offset + 0x64])[0]
-            if not (1 <= lv <= 99):
-                continue
-
-            pers_id = d[offset + 0xEE]
-            if pers_id < 1 or pers_id > 16:
-                continue
-
-            # Read all stat layers
-            white = [struct.unpack('<i', d[offset + 0x74 + i * 4:offset + 0x78 + i * 4])[0] for i in range(7)]
-            farm = [struct.unpack('<i', d[offset + 0x90 + i * 4:offset + 0x94 + i * 4])[0] // 10 for i in range(7)]
-            blue = [struct.unpack('<i', d[offset + 0xAC + i * 4:offset + 0xB0 + i * 4])[0] for i in range(7)]
-            base = base_stats_cache.get(db_id, [0] * 7)
-            total = [base[i] + white[i] + farm[i] + blue[i] for i in range(7)]
-
-            # Additional fields
-            talent_raw = struct.unpack('<i', d[offset + 0x100:offset + 0x104])[0]
-            talent = talent_raw // 1000 if talent_raw > 0 else 0
-            bond_raw = struct.unpack('<f', d[offset + 0x13C:offset + 0x140])[0]
-            bond = round(bond_raw) // 100 if bond_raw > 0 else 0
-
-            # Creation hash — party/box at +0x148, farm at +0x150
-            if region == "farm":
-                farm_hash = struct.unpack('<I', d[offset + 0x150:offset + 0x154])[0]
-                if farm_hash < 0x100:
-                    # Hash is zero/low — check if entry is real via training data
-                    training_status = struct.unpack('<I', d[offset + 0xD8:offset + 0xDC])[0]
-                    bond_raw = struct.unpack('<f', d[offset + 0x13C:offset + 0x140])[0]
-                    if training_status == 0 and bond_raw == 0:
-                        continue  # truly stale — no hash, no training, no bond
-                creation_hash = farm_hash
-            else:
-                creation_hash = struct.unpack('<I', d[offset + 0x148:offset + 0x14C])[0]
-
-            exp = struct.unpack('<I', d[offset + 0x64:offset + 0x68])[0]
-            cur_hp = struct.unpack('<i', d[offset + 0x6C:offset + 0x70])[0]
-            cur_sp = struct.unpack('<i', d[offset + 0x70:offset + 0x74])[0]
-            evo_fwd = d[offset + 0xC8]
-            total_transforms = struct.unpack('<I', d[offset + 0x138:offset + 0x13C])[0]
-            equip_1 = struct.unpack('<h', d[offset + 0x130:offset + 0x132])[0]
-            equip_2 = struct.unpack('<h', d[offset + 0x132:offset + 0x134])[0]
-
-            # Attachment skills (4 slots, each u16 skill + u16 padding)
-            attach_skills = []
-            for slot in range(4):
-                sid = struct.unpack('<H', d[offset + 0x120 + slot * 4:offset + 0x122 + slot * 4])[0]
-                attach_skills.append(sid)
-
-            nickname = entry_name if entry_name != info["name"] else None
-
-            # Determine location — farm entries by region,
-            # party/box determined after scan by array position
-            if region == "farm":
-                location = "farm"
-            else:
-                location = "party_box_pending"
-
-            # Evolution history
-            evo_history = []
-            for x in (0x108, 0x10C, 0x110, 0x114, 0x118):
-                prev_id = struct.unpack('<I', d[offset + x:offset + x + 4])[0]
-                if prev_id > 0:
-                    prev_info = id_to_info.get(prev_id)
-                    if prev_info:
-                        evo_history.append(prev_info["name"])
-                    else:
-                        break
-                else:
-                    break
-
-            entry = {
-                "_offset": offset,
-                "db_id": db_id,
-                "species": info["name"],
-                "nickname": nickname,
-                "display_name": entry_name,
-                "stage": info.get("stage", ""),
-                "attribute": info.get("attribute", ""),
-                "type": info.get("type", ""),
-                "level": lv,
-                "personality_id": pers_id,
-                "personality": PERSONALITY_NAMES.get(pers_id, f"?({pers_id})"),
-                "talent": talent,
-                "bond": bond,
-                "base": dict(zip(stat_names, base)),
-                "white": dict(zip(stat_names, white)),
-                "farm": dict(zip(stat_names, farm)),
-                "blue": dict(zip(stat_names, blue)),
-                "total": dict(zip(stat_names, total)),
-                "evo_fwd_count": evo_fwd,
-                "total_transforms": total_transforms,
-                "creation_hash": creation_hash,
-                "exp": exp,
-                "cur_hp": cur_hp,
-                "cur_sp": cur_sp,
-                "equip_1": equip_1,
-                "equip_2": equip_2,
-                "attach_skills": attach_skills,
-                "location": location,
-                "evo_history": evo_history,
-            }
-            results.append(entry)
-
-        # Label all party/box entries temporarily as "box" for dedup
-        for entry in results:
-            if entry["location"] == "party_box_pending":
-                entry["location"] = "box"
-
-        # Dedup pass 1: within each region by creation hash.
-        seen_pb = {}   # party/box hashes
-        seen_farm = {} # farm hashes
-        deduped = []
-        for entry in results:
-            h = entry["creation_hash"]
-            loc = entry["location"]
-            if loc == "box":
-                if h and h > 0x10 and h in seen_pb:
+                entry = self._parse_entry(d, db_off + 4, "farm", id_to_info,
+                                          base_stats_cache, stat_names)
+                if entry is None:
+                    continue
+                h = entry["creation_hash"]
+                if h and h > 0x10 and h in seen_farm_hash:
                     continue
                 if h and h > 0x10:
-                    seen_pb[h] = entry
-                deduped.append(entry)
-            elif loc == "farm":
-                if h and h > 0x10 and h in seen_farm:
-                    continue
-                if h and h > 0x10:
-                    seen_farm[h] = entry
-                deduped.append(entry)
-            else:
-                deduped.append(entry)
-
-        # Dedup pass 2: cross-region by (db_id, talent).
-        # When a Digimon is moved from party to farm, the game leaves a
-        # stale copy in the party/box region. Farm is authoritative.
-        farm_identity = set()
-        for entry in deduped:
-            if entry["location"] == "farm":
+                    seen_farm_hash.add(h)
+                farm_entries.append(entry)
                 farm_identity.add((entry["db_id"], entry["talent"]))
 
-        final = []
-        for entry in deduped:
-            if entry["location"] == "box":
-                identity = (entry["db_id"], entry["talent"])
-                if identity in farm_identity:
-                    continue  # stale party/box copy — farm has the real entry
-            final.append(entry)
+        # ── Phase 2: Scan party/box, skip ghosts ──
+        pb_entries = []
+        seen_pb_hash = set()
 
-        # NOW assign party membership using the in_active_party flag (+0x11C).
-        # After dedup has removed stale entries, scan from the top of the
-        # roster — the contiguous block of party_flag=1 entries = party.
-        pb_entries = sorted(
-            [e for e in final if e["location"] == "box"],
-            key=lambda e: e["_offset"])
+        pb_base = self._find_stride_base(0x001000, 0x009000, 0x150, id_to_info)
+        if pb_base is not None:
+            for db_off in range(pb_base, 0x053000, 0x150):
+                entry = self._parse_entry(d, db_off + 4, "party_box", id_to_info,
+                                          base_stats_cache, stat_names)
+                if entry is None:
+                    continue
+                # Skip if farm already claimed this individual
+                if (entry["db_id"], entry["talent"]) in farm_identity:
+                    continue
+                # Within-region hash dedup
+                h = entry["creation_hash"]
+                if h and h > 0x10 and h in seen_pb_hash:
+                    continue
+                if h and h > 0x10:
+                    seen_pb_hash.add(h)
+                entry["location"] = "box"
+                pb_entries.append(entry)
+
+        # ── Phase 3: Assign party using in_active_party flag (+0x11C) ──
+        # Contiguous block of flag=1 from the top = current party.
         party_ended = False
         party_count = 0
-        for entry in pb_entries:
+        for entry in pb_entries:  # already sorted by offset (scanned in order)
             if not party_ended:
                 party_flag = struct.unpack(
                     '<I', d[entry["_offset"] + 0x11C:entry["_offset"] + 0x120])[0]
@@ -517,7 +381,103 @@ class SaveFile:
                 else:
                     party_ended = True
 
-        return final
+        return farm_entries + pb_entries
+
+    def _parse_entry(self, d, offset, region, id_to_info, base_stats_cache, stat_names):
+        """Parse a single Digimon entry. Returns dict or None if invalid."""
+        db_id = struct.unpack('<I', d[offset - 4:offset])[0]
+        info = id_to_info.get(db_id)
+        if not info:
+            return None
+
+        name_end = d.find(b'\x00', offset, offset + 32)
+        if name_end <= offset:
+            return None
+        try:
+            entry_name = d[offset:name_end].decode('ascii')
+        except (UnicodeDecodeError, ValueError):
+            return None
+        if not entry_name or len(entry_name) < 2:
+            return None
+
+        lv = struct.unpack('<i', d[offset + 0x60:offset + 0x64])[0]
+        if not (1 <= lv <= 99):
+            return None
+
+        pers_id = d[offset + 0xEE]
+        if pers_id < 1 or pers_id > 16:
+            return None
+
+        # Stat layers
+        white = [struct.unpack('<i', d[offset + 0x74 + i * 4:offset + 0x78 + i * 4])[0] for i in range(7)]
+        farm = [struct.unpack('<i', d[offset + 0x90 + i * 4:offset + 0x94 + i * 4])[0] // 10 for i in range(7)]
+        blue = [struct.unpack('<i', d[offset + 0xAC + i * 4:offset + 0xB0 + i * 4])[0] for i in range(7)]
+        base = base_stats_cache.get(db_id, [0] * 7)
+        total = [base[i] + white[i] + farm[i] + blue[i] for i in range(7)]
+
+        talent_raw = struct.unpack('<i', d[offset + 0x100:offset + 0x104])[0]
+        talent = talent_raw // 1000 if talent_raw > 0 else 0
+        bond_raw = struct.unpack('<f', d[offset + 0x13C:offset + 0x140])[0]
+        bond = round(bond_raw) // 100 if bond_raw > 0 else 0
+
+        # Creation hash — differs by region
+        if region == "farm":
+            farm_hash = struct.unpack('<I', d[offset + 0x150:offset + 0x154])[0]
+            if farm_hash < 0x100:
+                # Hash not populated — verify entry is real via training/bond data
+                training_status = struct.unpack('<I', d[offset + 0xD8:offset + 0xDC])[0]
+                if training_status == 0 and bond_raw == 0:
+                    return None  # truly empty — no hash, no training, no bond
+            creation_hash = farm_hash
+        else:
+            creation_hash = struct.unpack('<I', d[offset + 0x148:offset + 0x14C])[0]
+
+        # Evolution history
+        evo_history = []
+        for x in (0x108, 0x10C, 0x110, 0x114, 0x118):
+            prev_id = struct.unpack('<I', d[offset + x:offset + x + 4])[0]
+            if prev_id > 0:
+                prev_info = id_to_info.get(prev_id)
+                if prev_info:
+                    evo_history.append(prev_info["name"])
+                else:
+                    break
+            else:
+                break
+
+        nickname = entry_name if entry_name != info["name"] else None
+
+        return {
+            "_offset": offset,
+            "db_id": db_id,
+            "species": info["name"],
+            "nickname": nickname,
+            "display_name": entry_name,
+            "stage": info.get("stage", ""),
+            "attribute": info.get("attribute", ""),
+            "type": info.get("type", ""),
+            "level": lv,
+            "personality_id": pers_id,
+            "personality": PERSONALITY_NAMES.get(pers_id, f"?({pers_id})"),
+            "talent": talent,
+            "bond": bond,
+            "base": dict(zip(stat_names, base)),
+            "white": dict(zip(stat_names, white)),
+            "farm": dict(zip(stat_names, farm)),
+            "blue": dict(zip(stat_names, blue)),
+            "total": dict(zip(stat_names, total)),
+            "evo_fwd_count": d[offset + 0xC8],
+            "total_transforms": struct.unpack('<I', d[offset + 0x138:offset + 0x13C])[0],
+            "creation_hash": creation_hash,
+            "exp": struct.unpack('<I', d[offset + 0x64:offset + 0x68])[0],
+            "cur_hp": struct.unpack('<i', d[offset + 0x6C:offset + 0x70])[0],
+            "cur_sp": struct.unpack('<i', d[offset + 0x70:offset + 0x74])[0],
+            "equip_1": struct.unpack('<h', d[offset + 0x130:offset + 0x132])[0],
+            "equip_2": struct.unpack('<h', d[offset + 0x132:offset + 0x134])[0],
+            "attach_skills": [struct.unpack('<H', d[offset + 0x120 + s * 4:offset + 0x122 + s * 4])[0] for s in range(4)],
+            "location": region if region == "farm" else "box",
+            "evo_history": evo_history,
+        }
 
     # ── Field writers ──
 
