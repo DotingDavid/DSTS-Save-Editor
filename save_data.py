@@ -461,11 +461,7 @@ class SaveFile:
         for i, entry in enumerate(party_box_entries):
             entry["location"] = "party" if i < 6 else "box"
 
-        # Dedup by creation hash, but ONLY within the same region.
-        # Cross-region dedup is unreliable because farm hashes appear
-        # to be derived from slot position, causing frequent collisions
-        # with party/box hashes. Two different Digimon that occupied
-        # the same farm slot at different times share a hash.
+        # Dedup pass 1: within each region by creation hash.
         seen_pb = {}   # party/box hashes
         seen_farm = {} # farm hashes
         deduped = []
@@ -474,14 +470,12 @@ class SaveFile:
             loc = entry["location"]
             if loc in ("party", "box"):
                 if h and h > 0x10 and h in seen_pb:
-                    # Same hash in party/box = true duplicate, keep first
                     continue
                 if h and h > 0x10:
                     seen_pb[h] = entry
                 deduped.append(entry)
             elif loc == "farm":
                 if h and h > 0x10 and h in seen_farm:
-                    # Same hash within farm = true duplicate, keep first
                     continue
                 if h and h > 0x10:
                     seen_farm[h] = entry
@@ -489,7 +483,35 @@ class SaveFile:
             else:
                 deduped.append(entry)
 
-        return deduped
+        # Dedup pass 2: cross-region by (db_id, talent_raw).
+        # When a Digimon is moved from party to farm, the game leaves a
+        # stale copy in the party/box region with active=1 and valid data.
+        # Creation hashes differ between regions, so hash-based dedup
+        # can't catch these. Match on (species, talent) instead — talent
+        # is stored x1000 and unique enough per individual.
+        # Farm is authoritative: if the same individual exists in both,
+        # drop the party/box copy.
+        farm_identity = set()
+        for entry in deduped:
+            if entry["location"] == "farm":
+                farm_identity.add((entry["db_id"], entry["talent"]))
+
+        final = []
+        for entry in deduped:
+            if entry["location"] in ("party", "box"):
+                identity = (entry["db_id"], entry["talent"])
+                if identity in farm_identity:
+                    continue  # stale party/box copy — farm has the real entry
+            final.append(entry)
+
+        # Re-assign party slots after removing stale entries
+        party_box_final = sorted(
+            [e for e in final if e["location"] in ("party", "box")],
+            key=lambda e: e["_offset"])
+        for i, entry in enumerate(party_box_final):
+            entry["location"] = "party" if i < 6 else "box"
+
+        return final
 
     # ── Field writers ──
 
