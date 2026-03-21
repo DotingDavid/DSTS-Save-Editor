@@ -334,35 +334,33 @@ class SaveFile:
         results = []
 
         # ── Party/box region ──
+        # Layout: 2 sentinel/header slots + 6 party slots + box entries.
+        # The first 8 stride positions are party territory — any valid
+        # Digimon within those positions is a party member.
+        # Position 8 onwards is the box (read until active_flag=0).
+        PARTY_SLOTS = 8  # 2 sentinels + 6 party members
         pb_base = self._find_stride_base(0x001000, 0x009000, 0x150, id_to_info)
         if pb_base is not None:
-            slot = 0
-            for db_off in range(pb_base, 0x053000, 0x150):
+            for slot, db_off in enumerate(range(pb_base, 0x053000, 0x150)):
                 name_off = db_off + 4
                 active = struct.unpack('<I', d[name_off + 0x140:name_off + 0x144])[0]
 
-                if slot < 6:
-                    # Party slot — check party_flag to see if occupied
-                    party_flag = struct.unpack(
-                        '<I', d[name_off + 0x11C:name_off + 0x120])[0]
-                    if party_flag == 1:
-                        entry = self._parse_entry(d, name_off, "party_box",
-                                                  id_to_info, base_stats_cache, stat_names)
-                        if entry is not None:
-                            entry["location"] = "party"
-                            results.append(entry)
-                    slot += 1
+                if slot < PARTY_SLOTS:
+                    # Party territory — any valid entry is a party member
+                    entry = self._parse_entry(d, name_off, "party_box",
+                                              id_to_info, base_stats_cache, stat_names)
+                    if entry is not None:
+                        entry["location"] = "party"
+                        results.append(entry)
                 elif active == 1:
-                    # Box entry — active_flag=1 means valid
+                    # Box entry
                     entry = self._parse_entry(d, name_off, "party_box",
                                               id_to_info, base_stats_cache, stat_names)
                     if entry is not None:
                         entry["location"] = "box"
                         results.append(entry)
-                    slot += 1
                 else:
-                    # active_flag=0 — tail reached, stop reading
-                    break
+                    break  # active_flag=0 — tail reached
 
         # ── Farm region ──
         # Farm has empty pre-allocated slots at the start (active=0, db_id=0),
