@@ -456,14 +456,10 @@ class SaveFile:
             }
             results.append(entry)
 
-        # Party = first 6 valid entries in the roster array (sorted by offset).
-        # The game stores party members at the start of the array.
-        # Empty padding slots are skipped, so we count filled entries.
-        party_box_entries = sorted(
-            [e for e in results if e["location"] == "party_box_pending"],
-            key=lambda e: e["_offset"])
-        for i, entry in enumerate(party_box_entries):
-            entry["location"] = "party" if i < 6 else "box"
+        # Label all party/box entries temporarily as "box" for dedup
+        for entry in results:
+            if entry["location"] == "party_box_pending":
+                entry["location"] = "box"
 
         # Dedup pass 1: within each region by creation hash.
         seen_pb = {}   # party/box hashes
@@ -472,7 +468,7 @@ class SaveFile:
         for entry in results:
             h = entry["creation_hash"]
             loc = entry["location"]
-            if loc in ("party", "box"):
+            if loc == "box":
                 if h and h > 0x10 and h in seen_pb:
                     continue
                 if h and h > 0x10:
@@ -487,14 +483,9 @@ class SaveFile:
             else:
                 deduped.append(entry)
 
-        # Dedup pass 2: cross-region by (db_id, talent_raw).
+        # Dedup pass 2: cross-region by (db_id, talent).
         # When a Digimon is moved from party to farm, the game leaves a
-        # stale copy in the party/box region with active=1 and valid data.
-        # Creation hashes differ between regions, so hash-based dedup
-        # can't catch these. Match on (species, talent) instead — talent
-        # is stored x1000 and unique enough per individual.
-        # Farm is authoritative: if the same individual exists in both,
-        # drop the party/box copy.
+        # stale copy in the party/box region. Farm is authoritative.
         farm_identity = set()
         for entry in deduped:
             if entry["location"] == "farm":
@@ -502,18 +493,29 @@ class SaveFile:
 
         final = []
         for entry in deduped:
-            if entry["location"] in ("party", "box"):
+            if entry["location"] == "box":
                 identity = (entry["db_id"], entry["talent"])
                 if identity in farm_identity:
                     continue  # stale party/box copy — farm has the real entry
             final.append(entry)
 
-        # Re-assign party slots after removing stale entries
-        party_box_final = sorted(
-            [e for e in final if e["location"] in ("party", "box")],
+        # NOW assign party membership using the in_active_party flag (+0x11C).
+        # After dedup has removed stale entries, scan from the top of the
+        # roster — the contiguous block of party_flag=1 entries = party.
+        pb_entries = sorted(
+            [e for e in final if e["location"] == "box"],
             key=lambda e: e["_offset"])
-        for i, entry in enumerate(party_box_final):
-            entry["location"] = "party" if i < 6 else "box"
+        party_ended = False
+        party_count = 0
+        for entry in pb_entries:
+            if not party_ended:
+                party_flag = struct.unpack(
+                    '<I', d[entry["_offset"] + 0x11C:entry["_offset"] + 0x120])[0]
+                if party_flag == 1 and party_count < 6:
+                    entry["location"] = "party"
+                    party_count += 1
+                else:
+                    party_ended = True
 
         return final
 
