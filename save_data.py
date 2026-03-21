@@ -360,7 +360,15 @@ class SaveFile:
                         entry["location"] = "box"
                         results.append(entry)
                 else:
-                    break  # active_flag=0 — tail reached
+                    # First active=0 entry is the box list head (newest entry).
+                    # The game displays the box in reverse starting from here.
+                    # Include it, then stop — everything after is stale.
+                    entry = self._parse_entry(d, name_off, "party_box",
+                                              id_to_info, base_stats_cache, stat_names)
+                    if entry is not None:
+                        entry["location"] = "box"
+                        results.append(entry)
+                    break
 
         # ── Farm region ──
         # Farm has empty pre-allocated slots at the start (active=0, db_id=0),
