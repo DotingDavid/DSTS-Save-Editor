@@ -324,11 +324,13 @@ class SaveFile:
                                                      row["def_"], row["int_"],
                                                      row["spi"], row["spd"]]
 
-        # ── Phase 1: Scan farm (authoritative) ──
+        # ── Phase 1: Scan both regions, within-region hash dedup ──
         farm_entries = []
-        farm_identity = {}      # (db_id, talent) → entry with highest EXP
-        seen_farm_hash = set()  # within-farm dedup
+        pb_entries = []
+        seen_farm_hash = set()
+        seen_pb_hash = set()
 
+        # Farm region
         fm_base = self._find_stride_base(0x053000, 0x055000, 0x158, id_to_info)
         if fm_base is not None:
             for db_off in range(fm_base, 0x05C000, 0x158):
@@ -342,17 +344,8 @@ class SaveFile:
                 if h and h > 0x10:
                     seen_farm_hash.add(h)
                 farm_entries.append(entry)
-                # Track by (species, talent) — talent is per-individual.
-                # Keep highest EXP since EXP only accumulates.
-                key = (entry["db_id"], entry["talent"])
-                prev = farm_identity.get(key)
-                if prev is None or entry["exp"] > prev["exp"]:
-                    farm_identity[key] = entry
 
-        # ── Phase 2: Scan party/box, skip ghosts ──
-        pb_entries = []
-        seen_pb_hash = set()
-
+        # Party/box region
         pb_base = self._find_stride_base(0x001000, 0x009000, 0x150, id_to_info)
         if pb_base is not None:
             for db_off in range(pb_base, 0x053000, 0x150):
@@ -360,12 +353,6 @@ class SaveFile:
                                           base_stats_cache, stat_names)
                 if entry is None:
                     continue
-                # Skip ghost: same individual in farm with equal or higher EXP
-                key = (entry["db_id"], entry["talent"])
-                farm_match = farm_identity.get(key)
-                if farm_match and farm_match["exp"] >= entry["exp"]:
-                    continue
-                # Within-region hash dedup
                 h = entry["creation_hash"]
                 if h and h > 0x10 and h in seen_pb_hash:
                     continue
@@ -374,11 +361,48 @@ class SaveFile:
                 entry["location"] = "box"
                 pb_entries.append(entry)
 
+        # ── Phase 2: Cross-region ghost removal — highest EXP wins ──
+        # When a Digimon moves between regions, the old region keeps a
+        # stale ghost. Same individual = same (db_id, talent). EXP only
+        # accumulates, so the real copy always has >= EXP.
+        # Only remove ghosts that exist in BOTH regions — same-region
+        # entries with matching keys are different individuals.
+        farm_by_key = {}
+        for entry in farm_entries:
+            key = (entry["db_id"], entry["talent"])
+            prev = farm_by_key.get(key)
+            if prev is None or entry["exp"] > prev["exp"]:
+                farm_by_key[key] = entry
+
+        pb_by_key = {}
+        for entry in pb_entries:
+            key = (entry["db_id"], entry["talent"])
+            prev = pb_by_key.get(key)
+            if prev is None or entry["exp"] > prev["exp"]:
+                pb_by_key[key] = entry
+
+        # Find keys that appear in BOTH regions — those are the ghosts
+        ghost_ids = set()
+        for key in farm_by_key:
+            if key in pb_by_key:
+                farm_entry = farm_by_key[key]
+                pb_entry = pb_by_key[key]
+                # Lower EXP = stale ghost
+                if farm_entry["exp"] >= pb_entry["exp"]:
+                    ghost_ids.add(id(pb_entry))   # party/box copy is ghost
+                else:
+                    ghost_ids.add(id(farm_entry))  # farm copy is ghost
+
+        results = [e for e in farm_entries + pb_entries if id(e) not in ghost_ids]
+
         # ── Phase 3: Assign party using in_active_party flag (+0x11C) ──
         # Contiguous block of flag=1 from the top = current party.
+        pb_sorted = sorted(
+            [e for e in results if e["location"] == "box"],
+            key=lambda e: e["_offset"])
         party_ended = False
         party_count = 0
-        for entry in pb_entries:  # already sorted by offset (scanned in order)
+        for entry in pb_sorted:
             if not party_ended:
                 party_flag = struct.unpack(
                     '<I', d[entry["_offset"] + 0x11C:entry["_offset"] + 0x120])[0]
@@ -388,7 +412,7 @@ class SaveFile:
                 else:
                     party_ended = True
 
-        return farm_entries + pb_entries
+        return results
 
     def _parse_entry(self, d, offset, region, id_to_info, base_stats_cache, stat_names):
         """Parse a single Digimon entry. Returns dict or None if invalid."""
