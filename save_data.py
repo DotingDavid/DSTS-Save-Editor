@@ -829,8 +829,12 @@ class SaveFile:
 
     # ── Save to disk ──
 
-    def save(self, backup=True):
-        """Encrypt and write back to disk. Creates a timestamped backup first."""
+    def save(self, backup=True, max_backups=2):
+        """Encrypt and write back to disk. Creates a timestamped backup first.
+
+        Keeps only the most recent max_backups auto-generated backups per slot
+        to avoid filling the disk.
+        """
         if backup and os.path.exists(self.path):
             backup_dir = os.path.join(os.path.dirname(self.path), 'backups')
             os.makedirs(backup_dir, exist_ok=True)
@@ -838,6 +842,17 @@ class SaveFile:
             ts = datetime.now().strftime('%Y%m%d_%H%M%S')
             backup_path = os.path.join(backup_dir, f"{basename}.{ts}.bak")
             shutil.copy2(self.path, backup_path)
+
+            # Prune old auto-backups for this slot, keep only the newest
+            existing = sorted(
+                [f for f in os.listdir(backup_dir)
+                 if f.startswith(basename) and f.endswith('.bak')],
+                reverse=True)  # newest first
+            for old in existing[max_backups:]:
+                try:
+                    os.remove(os.path.join(backup_dir, old))
+                except Exception:
+                    pass
 
         encrypted = save_crypto.encrypt(bytes(self._data))
         with open(self.path, 'wb') as f:

@@ -22,7 +22,7 @@ class _Cell(QSpinBox):
 
     def __init__(self, color, parent=None):
         super().__init__(parent)
-        self.setRange(0, 99999)
+        self.setRange(0, 9999)
         self.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setMinimumHeight(24)
