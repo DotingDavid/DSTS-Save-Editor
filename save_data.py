@@ -27,7 +27,7 @@ from save_layout import (DIGI, REGIONS, AGENT, PERSONALITY_NAMES,
                          AGENT_SKILL_STRIDE)
 from app_paths import get_db_path
 
-VERSION = "0.3.1"
+VERSION = "1.0.0"
 
 
 # ── Database lookups ────────────────────────────────────────────────

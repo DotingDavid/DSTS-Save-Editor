@@ -297,10 +297,10 @@ class RosterGrid(QWidget):
             others.reverse()
         elif sort_idx == 1:  # Name
             others.sort(key=lambda e: (e.get("nickname") or e["species"]).lower())
-        elif sort_idx == 2:  # Level desc
-            others.sort(key=lambda e: e["level"], reverse=True)
-        elif sort_idx == 3:  # Level asc
-            others.sort(key=lambda e: e["level"])
+        elif sort_idx == 2:  # Level desc, then alphabetical
+            others.sort(key=lambda e: (-e["level"], (e.get("nickname") or e["species"]).lower()))
+        elif sort_idx == 3:  # Level asc, then alphabetical
+            others.sort(key=lambda e: (e["level"], (e.get("nickname") or e["species"]).lower()))
         elif sort_idx == 4:  # Stage
             others.sort(key=lambda e: STAGE_ORDER.get(e.get("stage", ""), 99))
         elif sort_idx == 5:  # Personality
