@@ -331,13 +331,16 @@ class SaveFile:
                                                      row["def_"], row["int_"],
                                                      row["spi"], row["spd"]]
 
-        results = []
+        party_entries = []
+        box_entries = []
 
         # ── Party/box region ──
         # Layout: 2 sentinel/header slots + 6 party slots + box entries.
         # The first 8 stride positions are party territory — any valid
         # Digimon within those positions is a party member.
-        # Position 8 onwards is the box (read until active_flag=0).
+        # Position 8 onwards is the box (read until first active=0).
+        # The game displays the box in reverse (newest first), so we
+        # reverse box_entries before returning.
         PARTY_SLOTS = 8  # 2 sentinels + 6 party members
         pb_base = self._find_stride_base(0x001000, 0x009000, 0x150, id_to_info)
         if pb_base is not None:
@@ -346,34 +349,35 @@ class SaveFile:
                 active = struct.unpack('<I', d[name_off + 0x140:name_off + 0x144])[0]
 
                 if slot < PARTY_SLOTS:
-                    # Party territory — any valid entry is a party member
                     entry = self._parse_entry(d, name_off, "party_box",
                                               id_to_info, base_stats_cache, stat_names)
                     if entry is not None:
                         entry["location"] = "party"
-                        results.append(entry)
+                        party_entries.append(entry)
                 elif active == 1:
-                    # Box entry
                     entry = self._parse_entry(d, name_off, "party_box",
                                               id_to_info, base_stats_cache, stat_names)
                     if entry is not None:
                         entry["location"] = "box"
-                        results.append(entry)
+                        box_entries.append(entry)
                 else:
                     # First active=0 entry is the box list head (newest entry).
-                    # The game displays the box in reverse starting from here.
                     # Include it, then stop — everything after is stale.
                     entry = self._parse_entry(d, name_off, "party_box",
                                               id_to_info, base_stats_cache, stat_names)
                     if entry is not None:
                         entry["location"] = "box"
-                        results.append(entry)
+                        box_entries.append(entry)
                     break
+
+        # Reverse box to match game display order (newest first)
+        box_entries.reverse()
 
         # ── Farm region ──
         # Farm has empty pre-allocated slots at the start (active=0, db_id=0),
         # then a sentinel (active=1, db_id=0), then real entries (active=1),
         # then tail (active=0). Only break on active=0 AFTER seeing real data.
+        farm_entries = []
         fm_base = self._find_stride_base(0x053000, 0x055000, 0x158, id_to_info)
         if fm_base is not None:
             found_active = False
@@ -387,11 +391,11 @@ class SaveFile:
                     entry = self._parse_entry(d, name_off, "farm",
                                               id_to_info, base_stats_cache, stat_names)
                     if entry is not None:
-                        results.append(entry)
+                        farm_entries.append(entry)
                 elif found_active and active == 0:
                     break  # tail reached after real entries
 
-        return results
+        return party_entries + box_entries + farm_entries
 
     def _parse_entry(self, d, offset, region, id_to_info, base_stats_cache, stat_names):
         """Parse a single Digimon entry. Returns dict or None if invalid."""
