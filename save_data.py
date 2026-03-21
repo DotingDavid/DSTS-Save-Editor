@@ -326,7 +326,7 @@ class SaveFile:
 
         # ── Phase 1: Scan farm (authoritative) ──
         farm_entries = []
-        farm_identity = set()   # (db_id, talent) — used to reject stale party/box ghosts
+        farm_identity = {}      # (db_id, talent) → entry with highest EXP
         seen_farm_hash = set()  # within-farm dedup
 
         fm_base = self._find_stride_base(0x053000, 0x055000, 0x158, id_to_info)
@@ -342,7 +342,12 @@ class SaveFile:
                 if h and h > 0x10:
                     seen_farm_hash.add(h)
                 farm_entries.append(entry)
-                farm_identity.add((entry["db_id"], entry["talent"]))
+                # Track by (species, talent) — talent is per-individual.
+                # Keep highest EXP since EXP only accumulates.
+                key = (entry["db_id"], entry["talent"])
+                prev = farm_identity.get(key)
+                if prev is None or entry["exp"] > prev["exp"]:
+                    farm_identity[key] = entry
 
         # ── Phase 2: Scan party/box, skip ghosts ──
         pb_entries = []
@@ -355,8 +360,10 @@ class SaveFile:
                                           base_stats_cache, stat_names)
                 if entry is None:
                     continue
-                # Skip if farm already claimed this individual
-                if (entry["db_id"], entry["talent"]) in farm_identity:
+                # Skip ghost: same individual in farm with equal or higher EXP
+                key = (entry["db_id"], entry["talent"])
+                farm_match = farm_identity.get(key)
+                if farm_match and farm_match["exp"] >= entry["exp"]:
                     continue
                 # Within-region hash dedup
                 h = entry["creation_hash"]
