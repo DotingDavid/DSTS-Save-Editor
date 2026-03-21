@@ -72,6 +72,47 @@ def get_digimon_info(db_id):
     return None
 
 
+def get_growth_type(db_id):
+    """Look up growth_type for a Digimon species."""
+    row = _get_db().execute(
+        "SELECT growth_type FROM digimon WHERE id = ?", (db_id,)
+    ).fetchone()
+    return row["growth_type"] if row else 1
+
+
+def get_exp_for_level(level):
+    """Look up the total EXP required for a given level.
+
+    The game uses experience curve 1 for all species.
+    growth_type only affects stat growth, not EXP thresholds.
+    """
+    row = _get_db().execute(
+        "SELECT total_exp FROM experience_curves WHERE curve_id = 1 AND level = ?",
+        (level,)
+    ).fetchone()
+    return row["total_exp"] if row else 0
+
+
+def get_growth_stats(growth_type, level):
+    """Look up cumulative white stat growth at a given level.
+
+    The growth_curves table stores per-level increments, so we sum
+    all rows from level 1 through the target level.
+
+    Returns [hp, sp, atk, def, int, spi, spd] — the total growth
+    from leveling, NOT including personality bonuses.
+    """
+    row = _get_db().execute(
+        "SELECT SUM(hp), SUM(sp), SUM(atk), SUM(def_), SUM(int_), "
+        "SUM(spi), SUM(spd) FROM growth_curves "
+        "WHERE curve_id = ? AND level <= ?",
+        (growth_type, level)
+    ).fetchone()
+    if row and row[0] is not None:
+        return [row[0], row[1], row[2], row[3], row[4], row[5], row[6]]
+    return [0] * 7
+
+
 def get_base_stats(db_id):
     """Look up base stats (level 1) for a Digimon."""
     row = _get_db().execute(

@@ -1,22 +1,25 @@
-"""Tabbed Digimon detail editor panel (right side).
+"""Single-page Digimon detail editor panel (right side).
 
-Contains tabs: Identity, Stats, Skills & Equipment.
+Everything on one scrollable page — no tabs. Layout inspired by
+the game's Digimon detail card: identity at top, stats and skills
+side by side in the middle, evolution history at the bottom.
 """
 
 import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
-                              QTabWidget, QLabel, QPushButton)
+                              QLabel, QPushButton, QScrollArea,
+                              QSizePolicy, QFrame)
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QPixmap
 
-from ui.style import TEXT_SECONDARY, BORDER
+from ui.style import TEXT_SECONDARY, BORDER, ACCENT, TEXT_VALUE
 from ui.identity_editor import IdentityEditor
 from ui.stat_editor import StatEditor
 from ui.skills_editor import SkillsEditor
 
 
 class DigimonEditor(QWidget):
-    """Right panel: tabbed editor for one Digimon."""
+    """Right panel: single-page editor for one Digimon."""
 
     field_changed = pyqtSignal(str, object)  # field_name, new_value
     back_requested = pyqtSignal()
@@ -116,7 +119,6 @@ class DigimonEditor(QWidget):
             "stop:1 transparent); border: none; margin: 0 60px;")
         ph_layout.addWidget(line)
 
-        # Subtitle
         sub = QLabel("SAVE EDITOR  ·  DIGIMON STORY TIME STRANGER")
         sub.setStyleSheet(
             "color: rgba(0, 191, 255, 0.5); font-size: 13px; "
@@ -124,7 +126,6 @@ class DigimonEditor(QWidget):
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ph_layout.addWidget(sub)
 
-        # Tagline
         tag = QLabel("memory access granted")
         tag.setStyleSheet(
             "color: #00BFFF; font-size: 14px; font-weight: bold; "
@@ -132,7 +133,6 @@ class DigimonEditor(QWidget):
         tag.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ph_layout.addWidget(tag)
 
-        # Footer
         foot = QLabel("DIGITAL  ·  EVOLUTION  ·  PROTOCOL")
         foot.setStyleSheet(
             "color: rgba(136, 136, 170, 0.6); font-size: 10px; "
@@ -140,7 +140,6 @@ class DigimonEditor(QWidget):
         foot.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ph_layout.addWidget(foot)
 
-        # Instructions
         instr = QLabel("Select a save slot and click Load to get started")
         instr.setStyleSheet(
             f"color: {TEXT_SECONDARY}; font-size: 11px; "
@@ -150,13 +149,28 @@ class DigimonEditor(QWidget):
 
         ph_layout.addStretch(3)
 
-        # Tabbed editor
-        self._tabs = QTabWidget()
+        # ── Single-page editor (scrollable) ──
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
 
+        self._page = QWidget()
+        self._page.setStyleSheet("background: transparent;")
+        page_layout = QVBoxLayout(self._page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(0)
+
+        # Identity section (top) — species, nickname, core stats
         self._identity = IdentityEditor()
         self._identity.field_changed.connect(self._on_field_changed)
-        self._tabs.addTab(self._identity, "Identity")
+        page_layout.addWidget(self._identity)
 
+        # ── Stats + Skills side by side ──
+        mid = QHBoxLayout()
+        mid.setContentsMargins(0, 0, 0, 0)
+        mid.setSpacing(0)
+
+        # Stats (left column)
         self._stats = StatEditor()
         self._stats.blue_stat_changed.connect(
             lambda key, val: self._on_field_changed(f"blue_{key}", val))
@@ -164,22 +178,34 @@ class DigimonEditor(QWidget):
             lambda key, val: self._on_field_changed(f"white_{key}", val))
         self._stats.farm_stat_changed.connect(
             lambda key, val: self._on_field_changed(f"farm_{key}", val))
-        self._tabs.addTab(self._stats, "Stats")
+        mid.addWidget(self._stats, 3)
 
+        # Vertical separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setStyleSheet(f"color: {BORDER};")
+        mid.addWidget(sep)
+
+        # Skills (right column)
         self._skills = SkillsEditor()
         self._skills.field_changed.connect(self._on_field_changed)
-        self._tabs.addTab(self._skills, "Skills")
+        mid.addWidget(self._skills, 2)
 
-        self._tabs.hide()
+        page_layout.addLayout(mid)
+        page_layout.addStretch()
+
+        self._scroll.setWidget(self._page)
+        self._scroll.hide()
+
         layout.addWidget(self._placeholder)
-        layout.addWidget(self._tabs)
+        layout.addWidget(self._scroll)
 
     def set_entry(self, entry):
-        """Load a Digimon entry into all tabs."""
+        """Load a Digimon entry into all sections."""
         self._entry = entry
         self._placeholder.hide()
         self._header_widget.show()
-        self._tabs.show()
+        self._scroll.show()
         name = entry.get("nickname") or entry["species"]
         self._header_name.setText(f"{name}  Lv{entry['level']}")
         self._identity.set_entry(entry)
@@ -189,7 +215,7 @@ class DigimonEditor(QWidget):
     def clear(self):
         """Show placeholder when nothing is selected."""
         self._entry = None
-        self._tabs.hide()
+        self._scroll.hide()
         self._header_widget.hide()
         self._placeholder.show()
 

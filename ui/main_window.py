@@ -481,7 +481,30 @@ class MainWindow(QMainWindow):
         offset = self._current_entry["_offset"]
 
         if field == "level":
+            old_level = self._current_entry["level"]
             self._save_file.write_level(offset, value)
+            # Auto-update EXP and white stats to match new level
+            from save_data import get_growth_type, get_exp_for_level, get_growth_stats
+            db_id = self._current_entry["db_id"]
+            gt = get_growth_type(db_id)
+            # Set EXP to minimum required for new level
+            new_exp = get_exp_for_level(value)
+            self._save_file.write_exp(offset, new_exp)
+            # Adjust white stats by growth curve delta
+            old_growth = get_growth_stats(gt, old_level)
+            new_growth = get_growth_stats(gt, value)
+            for i in range(7):
+                stat_key = ["hp", "sp", "atk", "def", "int", "spi", "spd"][i]
+                old_white = self._current_entry["white"].get(stat_key, 0)
+                delta = new_growth[i] - old_growth[i]
+                self._save_file.write_white_stat(offset, i, max(0, old_white + delta))
+            # Refresh the editor to show updated values
+            self._roster = self._save_file.read_roster()
+            for e in self._roster:
+                if e["_offset"] == offset:
+                    self._current_entry = e
+                    self._editor.set_entry(e)
+                    break
         elif field == "personality":
             self._save_file.write_personality(offset, value)
         elif field == "talent":
