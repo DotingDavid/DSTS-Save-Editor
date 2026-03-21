@@ -302,6 +302,19 @@ class MainWindow(QMainWindow):
             return
         try:
             self._save_file.save(backup=True)
+            # Reload roster from the freshly saved data so the UI reflects changes
+            self._roster = self._save_file.read_roster()
+            self._grid.set_roster(self._roster)
+            if self._current_entry:
+                offset = self._current_entry["_offset"]
+                for e in self._roster:
+                    if e["_offset"] == offset:
+                        self._current_entry = e
+                        self._editor.set_entry(e)
+                        break
+            scan_count, scan_100 = self._save_file.scan_summary()
+            self._nav.update_summary(self._roster, scan_count, scan_100)
+            self._status_count.setText(f"{len(self._roster)} Digimon")
             self._update_dirty_indicator()
             show_toast(self, "Saved with backup", "success")
             logger.info("Saved to %s", self._save_file.path)
