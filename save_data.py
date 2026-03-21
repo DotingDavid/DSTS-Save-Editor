@@ -381,17 +381,30 @@ class SaveFile:
             if prev is None or entry["exp"] > prev["exp"]:
                 pb_by_key[key] = entry
 
-        # Find keys that appear in BOTH regions — those are the ghosts
+        # Find keys that appear in BOTH regions — the stale copy is the ghost.
+        # Higher EXP = current copy. When EXP is equal (game copies data
+        # verbatim on move), use party_flag and training_status to break ties.
         ghost_ids = set()
         for key in farm_by_key:
             if key in pb_by_key:
                 farm_entry = farm_by_key[key]
                 pb_entry = pb_by_key[key]
-                # Lower EXP = stale ghost
-                if farm_entry["exp"] >= pb_entry["exp"]:
-                    ghost_ids.add(id(pb_entry))   # party/box copy is ghost
+                if farm_entry["exp"] > pb_entry["exp"]:
+                    ghost_ids.add(id(pb_entry))
+                elif pb_entry["exp"] > farm_entry["exp"]:
+                    ghost_ids.add(id(farm_entry))
                 else:
-                    ghost_ids.add(id(farm_entry))  # farm copy is ghost
+                    # EXP equal — check which is actively placed
+                    pb_flag = struct.unpack(
+                        '<I', d[pb_entry["_offset"] + 0x11C:pb_entry["_offset"] + 0x120])[0]
+                    fm_training = struct.unpack(
+                        '<I', d[farm_entry["_offset"] + 0xD8:farm_entry["_offset"] + 0xDC])[0]
+                    if pb_flag == 1:
+                        ghost_ids.add(id(farm_entry))  # in party now, farm is ghost
+                    elif fm_training != 0:
+                        ghost_ids.add(id(pb_entry))    # actively training, pb is ghost
+                    else:
+                        ghost_ids.add(id(farm_entry))  # default: pb is more recent
 
         results = [e for e in farm_entries + pb_entries if id(e) not in ghost_ids]
 
