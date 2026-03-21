@@ -306,9 +306,16 @@ class SaveFile:
     def read_roster(self):
         """Read all Digimon entries from the save file.
 
-        Scan order: farm first (authoritative), then party/box.
-        Party/box entries that match a farm entry by (db_id, talent)
-        are stale ghosts and get skipped — no dedup passes needed.
+        The game uses compacting arrays — active entries are contiguous
+        from the start of each region, with active_flag=1. When a Digimon
+        is removed, the game shifts remaining entries up to fill the gap
+        and marks the tail as active_flag=0. No deduplication needed.
+
+        Party/box layout:
+          - First 6 entries = party slots (party_flag=1 means occupied)
+          - Entry 7+ = box (read until active_flag=0)
+        Farm layout:
+          - All entries contiguous (read until active_flag=0)
         """
         d = self._data
         stat_names = ['hp', 'sp', 'atk', 'def', 'int', 'spi', 'spd']
@@ -324,106 +331,59 @@ class SaveFile:
                                                      row["def_"], row["int_"],
                                                      row["spi"], row["spd"]]
 
-        # ── Phase 1: Scan both regions, within-region hash dedup ──
-        farm_entries = []
-        pb_entries = []
-        seen_farm_hash = set()
-        seen_pb_hash = set()
+        results = []
 
-        # Farm region
-        fm_base = self._find_stride_base(0x053000, 0x055000, 0x158, id_to_info)
-        if fm_base is not None:
-            for db_off in range(fm_base, 0x05C000, 0x158):
-                entry = self._parse_entry(d, db_off + 4, "farm", id_to_info,
-                                          base_stats_cache, stat_names)
-                if entry is None:
-                    continue
-                h = entry["creation_hash"]
-                if h and h > 0x10 and h in seen_farm_hash:
-                    continue
-                if h and h > 0x10:
-                    seen_farm_hash.add(h)
-                farm_entries.append(entry)
-
-        # Party/box region
+        # ── Party/box region ──
         pb_base = self._find_stride_base(0x001000, 0x009000, 0x150, id_to_info)
         if pb_base is not None:
+            slot = 0
             for db_off in range(pb_base, 0x053000, 0x150):
-                entry = self._parse_entry(d, db_off + 4, "party_box", id_to_info,
-                                          base_stats_cache, stat_names)
-                if entry is None:
-                    continue
-                h = entry["creation_hash"]
-                if h and h > 0x10 and h in seen_pb_hash:
-                    continue
-                if h and h > 0x10:
-                    seen_pb_hash.add(h)
-                entry["location"] = "box"
-                pb_entries.append(entry)
+                name_off = db_off + 4
+                active = struct.unpack('<I', d[name_off + 0x140:name_off + 0x144])[0]
 
-        # ── Phase 2: Cross-region ghost removal — highest EXP wins ──
-        # When a Digimon moves between regions, the old region keeps a
-        # stale ghost. Same individual = same (db_id, talent). EXP only
-        # accumulates, so the real copy always has >= EXP.
-        # Only remove ghosts that exist in BOTH regions — same-region
-        # entries with matching keys are different individuals.
-        farm_by_key = {}
-        for entry in farm_entries:
-            key = (entry["db_id"], entry["talent"])
-            prev = farm_by_key.get(key)
-            if prev is None or entry["exp"] > prev["exp"]:
-                farm_by_key[key] = entry
-
-        pb_by_key = {}
-        for entry in pb_entries:
-            key = (entry["db_id"], entry["talent"])
-            prev = pb_by_key.get(key)
-            if prev is None or entry["exp"] > prev["exp"]:
-                pb_by_key[key] = entry
-
-        # Find keys that appear in BOTH regions — the stale copy is the ghost.
-        # Higher EXP = current copy. When EXP is equal (game copies data
-        # verbatim on move), use party_flag and training_status to break ties.
-        ghost_ids = set()
-        for key in farm_by_key:
-            if key in pb_by_key:
-                farm_entry = farm_by_key[key]
-                pb_entry = pb_by_key[key]
-                if farm_entry["exp"] > pb_entry["exp"]:
-                    ghost_ids.add(id(pb_entry))
-                elif pb_entry["exp"] > farm_entry["exp"]:
-                    ghost_ids.add(id(farm_entry))
+                if slot < 6:
+                    # Party slot — check party_flag to see if occupied
+                    party_flag = struct.unpack(
+                        '<I', d[name_off + 0x11C:name_off + 0x120])[0]
+                    if party_flag == 1:
+                        entry = self._parse_entry(d, name_off, "party_box",
+                                                  id_to_info, base_stats_cache, stat_names)
+                        if entry is not None:
+                            entry["location"] = "party"
+                            results.append(entry)
+                    slot += 1
+                elif active == 1:
+                    # Box entry — active_flag=1 means valid
+                    entry = self._parse_entry(d, name_off, "party_box",
+                                              id_to_info, base_stats_cache, stat_names)
+                    if entry is not None:
+                        entry["location"] = "box"
+                        results.append(entry)
+                    slot += 1
                 else:
-                    # EXP equal — check which is actively placed
-                    pb_flag = struct.unpack(
-                        '<I', d[pb_entry["_offset"] + 0x11C:pb_entry["_offset"] + 0x120])[0]
-                    fm_training = struct.unpack(
-                        '<I', d[farm_entry["_offset"] + 0xD8:farm_entry["_offset"] + 0xDC])[0]
-                    if pb_flag == 1:
-                        ghost_ids.add(id(farm_entry))  # in party now, farm is ghost
-                    elif fm_training != 0:
-                        ghost_ids.add(id(pb_entry))    # actively training, pb is ghost
-                    else:
-                        ghost_ids.add(id(farm_entry))  # default: pb is more recent
+                    # active_flag=0 — tail reached, stop reading
+                    break
 
-        results = [e for e in farm_entries + pb_entries if id(e) not in ghost_ids]
+        # ── Farm region ──
+        # Farm has empty pre-allocated slots at the start (active=0, db_id=0),
+        # then a sentinel (active=1, db_id=0), then real entries (active=1),
+        # then tail (active=0). Only break on active=0 AFTER seeing real data.
+        fm_base = self._find_stride_base(0x053000, 0x055000, 0x158, id_to_info)
+        if fm_base is not None:
+            found_active = False
+            for db_off in range(fm_base, 0x05C000, 0x158):
+                name_off = db_off + 4
+                db_id = struct.unpack('<I', d[db_off:db_off + 4])[0]
+                active = struct.unpack('<I', d[name_off + 0x140:name_off + 0x144])[0]
 
-        # ── Phase 3: Assign party using in_active_party flag (+0x11C) ──
-        # Contiguous block of flag=1 from the top = current party.
-        pb_sorted = sorted(
-            [e for e in results if e["location"] == "box"],
-            key=lambda e: e["_offset"])
-        party_ended = False
-        party_count = 0
-        for entry in pb_sorted:
-            if not party_ended:
-                party_flag = struct.unpack(
-                    '<I', d[entry["_offset"] + 0x11C:entry["_offset"] + 0x120])[0]
-                if party_flag == 1 and party_count < 6:
-                    entry["location"] = "party"
-                    party_count += 1
-                else:
-                    party_ended = True
+                if active == 1 and db_id > 0 and db_id in id_to_info:
+                    found_active = True
+                    entry = self._parse_entry(d, name_off, "farm",
+                                              id_to_info, base_stats_cache, stat_names)
+                    if entry is not None:
+                        results.append(entry)
+                elif found_active and active == 0:
+                    break  # tail reached after real entries
 
         return results
 
