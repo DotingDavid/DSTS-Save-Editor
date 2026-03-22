@@ -36,48 +36,49 @@ class DigimonEditor(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header bar with back button and Digimon name
-        header = QHBoxLayout()
-        header.setContentsMargins(8, 6, 8, 6)
-        self._back_btn = QPushButton("< Back to Grid")
-        self._back_btn.clicked.connect(self.back_requested.emit)
-        self._back_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                color: {TEXT_SECONDARY};
-                border: none;
-                font-size: 11px;
-                padding: 4px 8px;
-            }}
-            QPushButton:hover {{
-                color: #00BFFF;
-            }}
-        """)
-        header.addWidget(self._back_btn)
-        header.addStretch()
-
-        self._export_btn = QPushButton("Export")
-        self._export_btn.clicked.connect(self.export_requested.emit)
-        self._export_btn.setStyleSheet(f"""
+        # Header bar — all items vertically centered
+        _btn_style = f"""
             QPushButton {{
                 background: transparent; color: {TEXT_SECONDARY};
                 border: 1px solid {BORDER}; border-radius: 3px;
-                padding: 3px 10px; font-size: 10px;
+                padding: 0 8px; font-size: 9px;
             }}
             QPushButton:hover {{ color: #00BFFF; border-color: #00BFFF; }}
+        """
+        header = QHBoxLayout()
+        header.setContentsMargins(8, 4, 12, 4)
+        header.setSpacing(6)
+
+        self._back_btn = QPushButton("< Back to Grid")
+        self._back_btn.clicked.connect(self.back_requested.emit)
+        self._back_btn.setFixedHeight(18)
+        self._back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {TEXT_SECONDARY};
+                border: none; font-size: 11px; padding: 0 4px;
+            }}
+            QPushButton:hover {{ color: #00BFFF; }}
         """)
-        header.addWidget(self._export_btn)
+        header.addWidget(self._back_btn)
 
-        self._import_btn = QPushButton("Import")
-        self._import_btn.clicked.connect(self.import_requested.emit)
-        self._import_btn.setStyleSheet(self._export_btn.styleSheet())
-        header.addWidget(self._import_btn)
-
+        header.addStretch()
         self._header_name = QLabel("")
         self._header_name.setStyleSheet(
             "color: #E8E8F0; font-size: 13px; font-weight: bold;")
         self._header_name.setAlignment(Qt.AlignmentFlag.AlignRight)
         header.addWidget(self._header_name)
+
+        self._export_btn = QPushButton("Export")
+        self._export_btn.clicked.connect(self.export_requested.emit)
+        self._export_btn.setFixedHeight(18)
+        self._export_btn.setStyleSheet(_btn_style)
+        header.addWidget(self._export_btn)
+
+        self._import_btn = QPushButton("Import")
+        self._import_btn.clicked.connect(self.import_requested.emit)
+        self._import_btn.setFixedHeight(18)
+        self._import_btn.setStyleSheet(_btn_style)
+        header.addWidget(self._import_btn)
 
         self._header_widget = QWidget()
         self._header_widget.setLayout(header)
@@ -154,23 +155,41 @@ class DigimonEditor(QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
 
+        # Outer wrapper with ~5% left/right padding via stretch spacers
         self._page = QWidget()
         self._page.setStyleSheet("background: transparent;")
-        page_layout = QVBoxLayout(self._page)
-        page_layout.setContentsMargins(0, 0, 0, 0)
+        outer = QHBoxLayout(self._page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addStretch(1)   # left padding
+
+        inner = QWidget()
+        inner.setStyleSheet("background: transparent;")
+        page_layout = QVBoxLayout(inner)
+        page_layout.setContentsMargins(0, 4, 0, 4)
         page_layout.setSpacing(0)
 
-        # Identity section (top) — species, nickname, core stats
+        outer.addWidget(inner, 38)  # content
+        outer.addStretch(1)   # right padding
+
+        # ── Top section: Identity (left) + Skills (right) ──
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(0)
+
+        # Left column: identity (species, core stats, evo history)
         self._identity = IdentityEditor()
         self._identity.field_changed.connect(self._on_field_changed)
-        page_layout.addWidget(self._identity)
+        top.addWidget(self._identity, 1)
 
-        # ── Stats + Skills side by side ──
-        mid = QHBoxLayout()
-        mid.setContentsMargins(0, 0, 0, 0)
-        mid.setSpacing(0)
+        # Right column: skills & equipment
+        self._skills = SkillsEditor()
+        self._skills.field_changed.connect(self._on_field_changed)
+        top.addWidget(self._skills, 1)
 
-        # Stats (left column)
+        page_layout.addLayout(top)
+
+        # ── Bottom section: full-width stat bars ──
         self._stats = StatEditor()
         self._stats.blue_stat_changed.connect(
             lambda key, val: self._on_field_changed(f"blue_{key}", val))
@@ -178,20 +197,7 @@ class DigimonEditor(QWidget):
             lambda key, val: self._on_field_changed(f"white_{key}", val))
         self._stats.farm_stat_changed.connect(
             lambda key, val: self._on_field_changed(f"farm_{key}", val))
-        mid.addWidget(self._stats, 3)
-
-        # Vertical separator
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setStyleSheet(f"color: {BORDER};")
-        mid.addWidget(sep)
-
-        # Skills (right column)
-        self._skills = SkillsEditor()
-        self._skills.field_changed.connect(self._on_field_changed)
-        mid.addWidget(self._skills, 2)
-
-        page_layout.addLayout(mid)
+        page_layout.addWidget(self._stats)
         page_layout.addStretch()
 
         self._scroll.setWidget(self._page)

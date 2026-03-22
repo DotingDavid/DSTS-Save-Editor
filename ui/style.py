@@ -100,6 +100,13 @@ QWidget {{
     font-family: "Segoe UI", sans-serif;
     font-size: 12px;
 }}
+QToolTip {{
+    background-color: #1A1A2E;
+    color: {TEXT_PRIMARY};
+    border: 1px solid {BORDER};
+    padding: 4px 8px;
+    font-size: 11px;
+}}
 
 QToolBar {{
     background-color: {BG_HEADER};

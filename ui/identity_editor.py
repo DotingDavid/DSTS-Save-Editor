@@ -15,6 +15,25 @@ from ui.style import (ACCENT, ACCENT_DIM, TEXT_PRIMARY, TEXT_SECONDARY,
 from ui.icon_cache import get_icon
 from save_layout import PERSONALITY_NAMES
 
+_SPIN_STYLE = f"""
+    QSpinBox {{
+        background: transparent;
+        color: {TEXT_VALUE};
+        border: none;
+        border-bottom: 1px solid {BORDER};
+        font-size: 12px;
+        font-weight: bold;
+        padding: 1px 4px;
+    }}
+    QSpinBox::up-button, QSpinBox::down-button {{
+        width: 0; height: 0; border: none;
+    }}
+    QSpinBox:focus {{
+        background: rgba(0,191,255,0.1);
+        border-bottom: 1px solid {ACCENT};
+    }}
+"""
+
 
 def _card(title):
     """Create a styled group card with a title."""
@@ -23,7 +42,7 @@ def _card(title):
         f"background-color: rgba(18, 18, 32, 180); "
         f"border: 1px solid {BORDER}; border-radius: 6px;")
     layout = QVBoxLayout(card)
-    layout.setContentsMargins(10, 6, 10, 6)
+    layout.setContentsMargins(10, 6, 10, 10)
     layout.setSpacing(4)
     if title:
         lbl = QLabel(title)
@@ -66,11 +85,24 @@ class IdentityEditor(QWidget):
         info = QVBoxLayout()
         info.setSpacing(1)
 
+        name_row = QHBoxLayout()
+        name_row.setSpacing(8)
         self._species_label = QLabel("—")
         self._species_label.setStyleSheet(
             f"color: {TEXT_VALUE}; font-size: 16px; font-weight: bold; "
             f"border: none; background: transparent;")
-        info.addWidget(self._species_label)
+        name_row.addWidget(self._species_label)
+        self._nick_edit = QLineEdit()
+        self._nick_edit.setMaxLength(30)
+        self._nick_edit.setPlaceholderText("Nickname")
+        self._nick_edit.setStyleSheet(
+            f"border: none; border-bottom: 1px solid {BORDER}; "
+            f"background: transparent; color: {ACCENT}; "
+            f"font-size: 13px; font-style: italic; padding: 0 4px;")
+        self._nick_edit.editingFinished.connect(self._on_nickname_changed)
+        name_row.addWidget(self._nick_edit)
+        name_row.addStretch()
+        info.addLayout(name_row)
 
         meta_row = QHBoxLayout()
         meta_row.setSpacing(6)
@@ -116,17 +148,7 @@ class IdentityEditor(QWidget):
         header_layout.addLayout(header)
         layout.addWidget(header_card)
 
-        # ── Nickname Card ──
-        nick_card, nick_layout = _card("NICKNAME")
-        self._nick_edit = QLineEdit()
-        self._nick_edit.setMaxLength(30)
-        self._nick_edit.setPlaceholderText("Enter nickname (bypasses censorship)")
-        self._nick_edit.setStyleSheet(
-            f"border: none; background: transparent; color: {TEXT_VALUE}; "
-            f"font-size: 13px; padding: 2px 0;")
-        self._nick_edit.editingFinished.connect(self._on_nickname_changed)
-        nick_layout.addWidget(self._nick_edit)
-        layout.addWidget(nick_card)
+        # Nickname is now inline with species name above
 
         # ── Core Stats Card ──
         core_card, core_layout = _card("CORE STATS")
@@ -146,6 +168,7 @@ class IdentityEditor(QWidget):
         grid.addWidget(_label("Level:"), 0, 0)
         self._level_spin = QSpinBox()
         self._level_spin.setRange(1, 99)
+        self._level_spin.setStyleSheet(_SPIN_STYLE)
         self._level_spin.valueChanged.connect(lambda v: self._emit("level", v))
         grid.addWidget(self._level_spin, 0, 1)
 
@@ -153,6 +176,7 @@ class IdentityEditor(QWidget):
         self._exp_spin = QSpinBox()
         self._exp_spin.setRange(0, 9_999_999)
         self._exp_spin.setSingleStep(1000)
+        self._exp_spin.setStyleSheet(_SPIN_STYLE)
         self._exp_spin.valueChanged.connect(lambda v: self._emit("exp", v))
         grid.addWidget(self._exp_spin, 0, 3)
 
@@ -160,6 +184,7 @@ class IdentityEditor(QWidget):
         grid.addWidget(_label("Talent:"), 1, 0)
         self._talent_spin = QSpinBox()
         self._talent_spin.setRange(0, 200)
+        self._talent_spin.setStyleSheet(_SPIN_STYLE)
         self._talent_spin.valueChanged.connect(lambda v: self._emit("talent", v))
         grid.addWidget(self._talent_spin, 1, 1)
 
@@ -178,29 +203,64 @@ class IdentityEditor(QWidget):
         bond_w.addWidget(self._bond_label)
         grid.addLayout(bond_w, 1, 3)
 
-        # Row 2: HP + SP
+        # Row 2: HP bar (click to heal) | SP bar (click to refill)
         grid.addWidget(_label("HP:", "#E57373"), 2, 0)
         hp_w = QHBoxLayout()
+        hp_w.setSpacing(4)
+        self._hp_bar = QWidget()
+        self._hp_bar.setFixedHeight(12)
+        self._hp_bar.setMinimumWidth(60)
+        self._hp_bar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._hp_bar.setToolTip("Click to fully heal")
+        self._hp_bar.setStyleSheet(
+            "background: #1A1A2E; border: 1px solid rgba(229,115,115,0.3); border-radius: 3px;")
+        self._hp_fill = QWidget(self._hp_bar)
+        self._hp_fill.setStyleSheet("background: #E57373; border-radius: 2px;")
+        self._hp_fill.setGeometry(1, 1, 0, 10)
+        self._hp_bar.mousePressEvent = lambda e: self._on_heal_hp()
+        hp_w.addWidget(self._hp_bar, 1)
+        self._hp_text = QLabel("—")
+        self._hp_text.setStyleSheet(
+            f"color: #E57373; font-size: 10px; border: none; background: transparent;")
+        self._hp_text.mouseDoubleClickEvent = lambda e: self._show_hp_edit()
+        hp_w.addWidget(self._hp_text)
+        # Hidden spinbox for double-click editing
         self._hp_spin = QSpinBox()
         self._hp_spin.setRange(0, 99_999)
+        self._hp_spin.setStyleSheet(_SPIN_STYLE)
         self._hp_spin.valueChanged.connect(lambda v: self._emit("cur_hp", v))
+        self._hp_spin.editingFinished.connect(self._hide_hp_edit)
+        self._hp_spin.hide()
         hp_w.addWidget(self._hp_spin)
-        self._hp_max = QLabel("/ —")
-        self._hp_max.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 10px; border: none; background: transparent;")
-        hp_w.addWidget(self._hp_max)
         grid.addLayout(hp_w, 2, 1)
 
         grid.addWidget(_label("SP:", "#CE93D8"), 2, 2)
         sp_w = QHBoxLayout()
+        sp_w.setSpacing(4)
+        self._sp_bar = QWidget()
+        self._sp_bar.setFixedHeight(12)
+        self._sp_bar.setMinimumWidth(60)
+        self._sp_bar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._sp_bar.setToolTip("Click to fully refill")
+        self._sp_bar.setStyleSheet(
+            "background: #1A1A2E; border: 1px solid rgba(206,147,216,0.3); border-radius: 3px;")
+        self._sp_fill = QWidget(self._sp_bar)
+        self._sp_fill.setStyleSheet("background: #CE93D8; border-radius: 2px;")
+        self._sp_fill.setGeometry(1, 1, 0, 10)
+        self._sp_bar.mousePressEvent = lambda e: self._on_refill_sp()
+        sp_w.addWidget(self._sp_bar, 1)
+        self._sp_text = QLabel("—")
+        self._sp_text.setStyleSheet(
+            f"color: #CE93D8; font-size: 10px; border: none; background: transparent;")
+        self._sp_text.mouseDoubleClickEvent = lambda e: self._show_sp_edit()
+        sp_w.addWidget(self._sp_text)
         self._sp_spin = QSpinBox()
         self._sp_spin.setRange(0, 99_999)
+        self._sp_spin.setStyleSheet(_SPIN_STYLE)
         self._sp_spin.valueChanged.connect(lambda v: self._emit("cur_sp", v))
+        self._sp_spin.editingFinished.connect(self._hide_sp_edit)
+        self._sp_spin.hide()
         sp_w.addWidget(self._sp_spin)
-        self._sp_max = QLabel("/ —")
-        self._sp_max.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: 10px; border: none; background: transparent;")
-        sp_w.addWidget(self._sp_max)
         grid.addLayout(sp_w, 2, 3)
 
         core_layout.addLayout(grid)
@@ -217,6 +277,7 @@ class IdentityEditor(QWidget):
         meta_grid.addWidget(_label("Evo Counter:"), 0, 0)
         self._evo_spin = QSpinBox()
         self._evo_spin.setRange(0, 255)
+        self._evo_spin.setStyleSheet(_SPIN_STYLE)
         self._evo_spin.setToolTip("Reset to 0 for unlimited blue stat gains from evolution")
         self._evo_spin.valueChanged.connect(lambda v: self._emit("evo_fwd_count", v))
         meta_grid.addWidget(self._evo_spin, 0, 1)
@@ -284,10 +345,15 @@ class IdentityEditor(QWidget):
         self._bond_slider.setValue(entry["bond"])
         self._bond_label.setText(f"{entry['bond']}%")
 
-        self._hp_spin.setValue(entry.get("cur_hp", 0))
-        self._hp_max.setText(f"/ {entry['total'].get('hp', 0)}")
-        self._sp_spin.setValue(entry.get("cur_sp", 0))
-        self._sp_max.setText(f"/ {entry['total'].get('sp', 0)}")
+        cur_hp = entry.get("cur_hp", 0)
+        self._hp_spin.setValue(cur_hp)
+        self._hp_spin.hide()
+        self._update_hp_bar(cur_hp)
+
+        cur_sp = entry.get("cur_sp", 0)
+        self._sp_spin.setValue(cur_sp)
+        self._sp_spin.hide()
+        self._update_sp_bar(cur_sp)
 
         self._evo_spin.setValue(entry["evo_fwd_count"])
         self._transforms.setText(str(entry.get("total_transforms", 0)))
@@ -356,3 +422,63 @@ class IdentityEditor(QWidget):
         dlg = SpeciesChooserDialog(self._entry["species"], self)
         if dlg.exec() and dlg.selected_id:
             self.field_changed.emit("species_change", dlg.selected_id)
+
+    def _update_hp_bar(self, cur):
+        """Update HP bar — solid fill on dark background."""
+        raw = self._entry["total"].get("hp", 1) if self._entry else 1
+        bar_max = max(cur, raw, 1)
+        pct = max(min(cur / bar_max, 1.0), 0.0)
+        bar_w = max(self._hp_bar.width() - 2, 1)
+        self._hp_fill.setGeometry(1, 1, int(pct * bar_w), 10)
+        self._hp_text.setText(f"{cur}")
+
+    def _update_sp_bar(self, cur):
+        raw = self._entry["total"].get("sp", 1) if self._entry else 1
+        bar_max = max(cur, raw, 1)
+        pct = max(min(cur / bar_max, 1.0), 0.0)
+        bar_w = max(self._sp_bar.width() - 2, 1)
+        self._sp_fill.setGeometry(1, 1, int(pct * bar_w), 10)
+        self._sp_text.setText(f"{cur}")
+
+    def _on_heal_hp(self):
+        if not self._entry or self._updating:
+            return
+        # Use raw total as heal target — game caps to actual max on load
+        raw = self._entry["total"].get("hp", 0)
+        heal_to = max(raw, self._hp_spin.value())
+        self._hp_spin.setValue(heal_to)
+        self._update_hp_bar(heal_to)
+
+    def _on_refill_sp(self):
+        if not self._entry or self._updating:
+            return
+        raw = self._entry["total"].get("sp", 0)
+        refill_to = max(raw, self._sp_spin.value())
+        self._sp_spin.setValue(refill_to)
+        self._update_sp_bar(refill_to)
+
+    def _show_hp_edit(self):
+        self._hp_text.hide()
+        self._hp_bar.hide()
+        self._hp_spin.show()
+        self._hp_spin.setFocus()
+        self._hp_spin.selectAll()
+
+    def _hide_hp_edit(self):
+        self._hp_spin.hide()
+        self._hp_text.show()
+        self._hp_bar.show()
+        self._update_hp_bar(self._hp_spin.value())
+
+    def _show_sp_edit(self):
+        self._sp_text.hide()
+        self._sp_bar.hide()
+        self._sp_spin.show()
+        self._sp_spin.setFocus()
+        self._sp_spin.selectAll()
+
+    def _hide_sp_edit(self):
+        self._sp_spin.hide()
+        self._sp_text.show()
+        self._sp_bar.show()
+        self._update_sp_bar(self._sp_spin.value())

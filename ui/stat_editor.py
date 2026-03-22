@@ -1,6 +1,7 @@
-"""Stats tab — responsive layout, horizontal bars + editable table.
+"""Stats section — compact table with bars extending to the right.
 
-Everything scales with the panel width. No fixed pixel widths.
+Layout: Name | Base | Growth | Farm | Blue | Total | [=== bar ===]
+Numbers are compact on the left, bars fill remaining space on the right.
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -18,22 +19,23 @@ STAT_LABELS = ["HP", "SP", "ATK", "DEF", "INT", "SPI", "SPD"]
 
 
 class _Cell(QSpinBox):
-    """Borderless editable cell — adapts to column width."""
+    """Compact editable stat cell."""
 
     def __init__(self, color, parent=None):
         super().__init__(parent)
         self.setRange(0, 9999)
         self.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setMinimumHeight(24)
+        self.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.setFixedWidth(46)
+        self.setFixedHeight(20)
         self.setStyleSheet(f"""
             QSpinBox {{
                 background: transparent;
                 color: {color};
                 border: none;
-                border-radius: 3px;
-                font-size: 13px;
+                font-size: 11px;
                 font-weight: bold;
+                padding: 0 2px;
             }}
             QSpinBox:hover {{ background: rgba(255,255,255,0.04); }}
             QSpinBox:focus {{
@@ -44,7 +46,7 @@ class _Cell(QSpinBox):
 
 
 class StatEditor(QWidget):
-    """Responsive stat editor — bars + table scale to panel width."""
+    """Compact stat editor — table on left, bars on right."""
 
     blue_stat_changed = pyqtSignal(str, int)
     white_stat_changed = pyqtSignal(str, int)
@@ -65,109 +67,103 @@ class StatEditor(QWidget):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 6, 10, 6)
-        layout.setSpacing(6)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(0)
 
-        # ── Bars — responsive, stretch to 60% of width ──
-        bars = QGridLayout()
-        bars.setSpacing(2)
-        bars.setColumnStretch(0, 0)   # name: fixed content
-        bars.setColumnStretch(1, 3)   # bar: takes most space
-        bars.setColumnStretch(2, 0)   # total: fixed content
+        # Layout: Name | Base | Growth | Farm | Blue | Total | Bar
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(4)
+        grid.setVerticalSpacing(0)
+        grid.setContentsMargins(0, 0, 0, 0)
 
-        for row, (key, label) in enumerate(zip(STAT_KEYS, STAT_LABELS)):
-            n = QLabel(label)
-            n.setStyleSheet(
-                f"color: {STAT_COLORS[key]}; font-size: 10px; font-weight: bold; "
-                f"background: transparent;")
-            n.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            bars.addWidget(n, row, 0)
-
-            bar = StatBar()
-            bar.setMaximumWidth(300)
-            self._bars[key] = bar
-            bars.addWidget(bar, row, 1)
-
-            t = QLabel("—")
-            t.setStyleSheet(
-                f"color: {TEXT_SECONDARY}; font-size: 9px; background: transparent;")
-            t.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self._bar_totals[key] = t
-            bars.addWidget(t, row, 2)
-
-        layout.addLayout(bars)
-
-        # ── Table — responsive columns using stretch factors ──
-        table = QGridLayout()
-        table.setSpacing(0)
-        table.setContentsMargins(0, 2, 0, 0)
-
-        # Column proportions: name(1) base(2) growth(2) farm(2) blue(2) total(2)
-        table.setColumnStretch(0, 1)
-        table.setColumnStretch(1, 2)
-        table.setColumnStretch(2, 2)
-        table.setColumnStretch(3, 2)
-        table.setColumnStretch(4, 2)
-        table.setColumnStretch(5, 2)
+        # Numbers ~35%, bar ~65%
+        for col in range(6):
+            grid.setColumnStretch(col, 0)
+        grid.setColumnStretch(6, 65)  # bar gets ~65%
 
         # Headers
-        for col, (text, color) in enumerate([
-                ("", TEXT_SECONDARY), ("Base", STAT_BASE), ("Growth", STAT_WHITE),
-                ("Farm", STAT_FARM), ("Blue", STAT_BLUE), ("Total", TEXT_VALUE)]):
+        headers = [
+            ("", TEXT_SECONDARY),
+            ("Base", STAT_BASE),
+            ("Growth", STAT_WHITE),
+            ("Farm", STAT_FARM),
+            ("Blue", STAT_BLUE),
+            ("Total", TEXT_VALUE),
+            ("", TEXT_SECONDARY),
+        ]
+        for col, (text, color) in enumerate(headers):
             h = QLabel(text)
             h.setStyleSheet(
-                f"color: {color}; font-size: 9px; font-weight: bold; "
+                f"color: {color}; font-size: 8px; font-weight: bold; "
                 f"background: transparent;")
             h.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            h.setFixedHeight(16)
-            table.addWidget(h, 0, col)
+            h.setFixedHeight(14)
+            grid.addWidget(h, 0, col)
 
         # Data rows
         for row, (key, label) in enumerate(zip(STAT_KEYS, STAT_LABELS), start=1):
-            bg = "rgba(255,255,255,0.02)" if row % 2 == 0 else "transparent"
-
+            # Name
             name = QLabel(label)
             name.setStyleSheet(
-                f"color: {STAT_COLORS[key]}; font-size: 13px; font-weight: bold; "
-                f"background: {bg};")
-            name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            name.setMinimumHeight(28)
-            table.addWidget(name, row, 0)
+                f"color: {STAT_COLORS[key]}; font-size: 10px; font-weight: bold; "
+                f"background: transparent; padding-right: 4px;")
+            name.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            name.setFixedHeight(20)
+            grid.addWidget(name, row, 0)
 
+            # Base (read-only label, slightly wider for 3-digit values)
             base = QLabel("—")
+            base.setFixedWidth(36)
             base.setStyleSheet(
-                f"color: {STAT_BASE}; font-size: 13px; font-weight: bold; "
-                f"background: {bg};")
-            base.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            base.setMinimumHeight(28)
+                f"color: {STAT_BASE}; font-size: 11px; font-weight: bold; "
+                f"background: transparent; padding: 0 2px;")
+            base.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self._base_labels[key] = base
-            table.addWidget(base, row, 1)
+            grid.addWidget(base, row, 1)
 
+            # Growth (editable)
             white = _Cell(STAT_WHITE)
             white.valueChanged.connect(lambda v, k=key: self._on_white_changed(k, v))
             self._white_cells[key] = white
-            table.addWidget(white, row, 2)
+            grid.addWidget(white, row, 2)
 
+            # Farm (editable)
             farm = _Cell(STAT_FARM)
             farm.valueChanged.connect(lambda v, k=key: self._on_farm_changed(k, v))
             self._farm_cells[key] = farm
-            table.addWidget(farm, row, 3)
+            grid.addWidget(farm, row, 3)
 
+            # Blue (editable)
             blue = _Cell(STAT_BLUE)
             blue.valueChanged.connect(lambda v, k=key: self._on_blue_changed(k, v))
             self._blue_cells[key] = blue
-            table.addWidget(blue, row, 4)
+            grid.addWidget(blue, row, 4)
 
+            # Total (read-only)
             total = QLabel("—")
+            total.setFixedWidth(42)
             total.setStyleSheet(
-                f"color: {TEXT_VALUE}; font-size: 14px; font-weight: bold; "
-                f"background: {bg};")
-            total.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            total.setMinimumHeight(28)
+                f"color: {TEXT_VALUE}; font-size: 11px; font-weight: bold; "
+                f"background: transparent; padding: 0 2px;")
+            total.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self._total_labels[key] = total
-            table.addWidget(total, row, 5)
+            self._bar_totals[key] = total
+            grid.addWidget(total, row, 5)
 
-        layout.addLayout(table)
+            # Bar (fills remaining width)
+            bar = StatBar()
+            bar.setMinimumHeight(18)
+            self._bars[key] = bar
+            grid.addWidget(bar, row, 6)
+
+        layout.addLayout(grid)
+
+        hint = QLabel("Click on Growth, Farm, or Blue numbers to edit")
+        hint.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 9px; "
+            f"background: transparent; padding: 4px 0 0 0;")
+        hint.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(hint)
         layout.addStretch()
 
     def set_entry(self, entry):

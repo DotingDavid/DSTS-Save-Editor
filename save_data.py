@@ -487,7 +487,7 @@ class SaveFile:
         else:
             creation_hash = struct.unpack('<I', d[offset + 0x148:offset + 0x14C])[0]
 
-        # Evolution history
+        # Evolution history — stored most-recent-first, reverse for display
         evo_history = []
         for x in (0x108, 0x10C, 0x110, 0x114, 0x118):
             prev_id = struct.unpack('<I', d[offset + x:offset + x + 4])[0]
@@ -499,6 +499,7 @@ class SaveFile:
                     break
             else:
                 break
+        evo_history.reverse()  # oldest first for chronological display
 
         nickname = entry_name if entry_name != info["name"] else None
 
