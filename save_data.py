@@ -111,6 +111,17 @@ def stamp_save_uid(path: str) -> str | None:
     if slot == AUTOSAVE_SLOT:
         return None
 
+    # Back up the original unsigned save before writing the signature.
+    # Separate from the regular auto-backup folder — this is a one-time
+    # "pre-signature" backup so users can restore if they're uncomfortable
+    # with their save being signed.
+    pre_sig_dir = os.path.join(os.path.dirname(path), 'pre_signature_backups')
+    os.makedirs(pre_sig_dir, exist_ok=True)
+    backup_path = os.path.join(pre_sig_dir, os.path.basename(path))
+    if not os.path.exists(backup_path):
+        shutil.copy2(path, backup_path)
+        logger.info("Pre-signature backup: %s", backup_path)
+
     # Generate and write
     uid = generate_save_uid(steam_id, slot)
     write_save_uid(data, uid)
