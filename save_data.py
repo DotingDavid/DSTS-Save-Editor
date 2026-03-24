@@ -33,7 +33,7 @@ VERSION = "1.0.0"
 # ── Save UID system ──────────────────────────────────────────────────
 # Shared namespace for deterministic UUID generation. MUST be identical
 # in both ANAMNESIS SE and ANAMNESIS Companion.
-ANSE_NAMESPACE = uuid.UUID('f47ac10b-58cc-4372-a567-0e02b2c3d479')
+ANAMNESIS_NAMESPACE = uuid.UUID('f47ac10b-58cc-4372-a567-0e02b2c3d479')
 SAVE_UID_OFFSET = 0x904       # offset in decrypted save data
 SAVE_UID_MAGIC = b'ANAMNESIS|' # magic bytes to detect existing signature
 AUTOSAVE_SLOT = '0000'        # never write UID to autosave — read only
@@ -44,9 +44,9 @@ def generate_save_uid(steam_id: str, slot_number: str) -> str:
 
     Same inputs → same output, every time, in any language.
     Both ANAMNESIS SE and ANAMNESIS Companion use this exact function
-    with the same ANSE_NAMESPACE to produce identical UUIDs.
+    with the same ANAMNESIS_NAMESPACE to produce identical UUIDs.
     """
-    return str(uuid.uuid5(ANSE_NAMESPACE, f"{steam_id}:{slot_number}"))
+    return str(uuid.uuid5(ANAMNESIS_NAMESPACE, f"{steam_id}:{slot_number}"))
 
 
 def read_save_uid(data: bytes) -> str | None:
