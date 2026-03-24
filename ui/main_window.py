@@ -91,7 +91,9 @@ class MainWindow(QMainWindow):
             from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout
             dlg = QDialog(self)
             dlg.setWindowTitle("ANAMNESIS — Save File Identification")
-            dlg.setFixedWidth(480)
+            dlg.setFixedWidth(500)
+            # Prevent closing without choosing
+            dlg.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
             dlg.setStyleSheet(f"""
                 QDialog {{ background: #0C0C14; color: #E0E0E0; }}
                 QLabel {{ color: #E0E0E0; }}
@@ -103,7 +105,7 @@ class MainWindow(QMainWindow):
                 QPushButton:hover {{ border-color: #00BFFF; color: #00BFFF; }}
             """)
             dl = QVBoxLayout(dlg)
-            dl.setSpacing(12)
+            dl.setSpacing(10)
             dl.setContentsMargins(24, 20, 24, 20)
 
             title = QLabel("ANAMNESIS SE would like to write a small "
@@ -112,21 +114,38 @@ class MainWindow(QMainWindow):
             title.setWordWrap(True)
             dl.addWidget(title)
 
-            body = QLabel(
+            body1 = QLabel(
                 "This uses unused space in the save data that the game "
-                "ignores. It allows ANAMNESIS tools to track your "
-                "collection and settings separately for each save slot.\n\n"
-                "A backup of each save will be created before any changes "
-                "are made, stored in a 'pre_signature_backups' folder. "
-                "You can restore these backups at any time from the "
-                "File Manager.\n\n"
-                "If you decline, some features may not work correctly "
-                "across multiple save files.\n\n"
-                "You can remove the signature later via "
-                "File Manager > Unsign Selected Save.")
-            body.setStyleSheet("font-size: 11px; color: #A0A0B0;")
-            body.setWordWrap(True)
-            dl.addWidget(body)
+                "completely ignores. It does not affect your game in any way. "
+                "It simply allows ANAMNESIS tools to track your "
+                "collection and settings separately for each save slot.")
+            body1.setStyleSheet("font-size: 11px; color: #A0A0B0;")
+            body1.setWordWrap(True)
+            dl.addWidget(body1)
+
+            safe = QLabel(
+                "A backup of every save file will be created automatically "
+                "before any changes are made. You can restore these backups "
+                "at any time from the File Manager.")
+            safe.setStyleSheet("font-size: 12px; color: #81C784; font-weight: bold;")
+            safe.setWordWrap(True)
+            dl.addWidget(safe)
+
+            warn = QLabel(
+                "If you decline, some features will not work correctly "
+                "across multiple save files. Collection data, evolution "
+                "goals, and settings may bleed between saves.")
+            warn.setStyleSheet("font-size: 12px; color: #EF5350; font-weight: bold;")
+            warn.setWordWrap(True)
+            dl.addWidget(warn)
+
+            recommend = QLabel(
+                "It is recommended that you select Yes. This is perfectly "
+                "safe and can be undone at any time via File Manager > "
+                "Unsign Selected Save.")
+            recommend.setStyleSheet("font-size: 11px; color: #FFD54F;")
+            recommend.setWordWrap(True)
+            dl.addWidget(recommend)
 
             btns = QHBoxLayout()
             btns.addStretch()
