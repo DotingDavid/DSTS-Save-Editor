@@ -137,11 +137,11 @@ class IdentityEditor(QWidget):
         _pskill_db = _db()
         self._pskill_combo.addItem("(None)", 0)
         for row in _pskill_db.execute(
-                "SELECT id, description FROM personality_skills "
-                "WHERE description IS NOT NULL ORDER BY id"):
+                "SELECT id, name, description FROM personality_skills "
+                "WHERE name IS NOT NULL AND name != '' ORDER BY id"):
             desc = re.sub(r'\{[^}]+\}', '', row["description"] or "")
-            desc = desc.replace('\n', ' ').strip()[:65]
-            self._pskill_combo.addItem(desc, row["id"])
+            desc = desc.replace('\n', ' ').strip()[:50]
+            self._pskill_combo.addItem(f"{row['name']}  —  {desc}", row["id"])
         self._pskill_combo.currentIndexChanged.connect(self._on_pskill_changed)
         pers_row.addWidget(self._pskill_combo, 1)
 
