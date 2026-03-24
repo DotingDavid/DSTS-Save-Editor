@@ -318,10 +318,10 @@ DIGI = {
     'personality_id':   (0x0EE, 'B',  'Personality ID (1-16)',                                'HIGH',   'USED'),
     'ef_pad':           (0x0EF, 'B',  'Zero',                                                'HIGH',   'CONFIRMED_EMPTY'),
 
-    # ── Capture Location / Origin ──
-    'origin_area_1':    (0x0F0, 'I',  'Capture area indicator 1 (0-127). Digimon caught in same area have same value. Encodes WHERE obtained', 'HIGH', 'NEW'),
-    'origin_area_2':    (0x0F4, 'I',  'Capture area indicator 2 (0-127). Paired with F0 to form area+sub-area. Same batch = same values', 'HIGH', 'NEW'),
-    'origin_slot':      (0x0F8, 'I',  'Capture slot/encounter index (1-78). Varies slightly within same-area batches. Sub-area or encounter slot', 'MEDIUM', 'NEW'),
+    # ── Personality Skill / Unknown ──
+    'pers_skill_data_1': (0x0F0, 'I',  'Personality-related data 1. Changes when personality skill changes. Previously mislabeled as origin_area_1.', 'MEDIUM', 'NEW'),
+    'pers_skill_data_2': (0x0F4, 'I',  'Personality-related data 2. Changes with personality skill. Previously mislabeled as origin_area_2.', 'MEDIUM', 'NEW'),
+    'pers_skill_id':     (0x0F8, 'I',  'CONFIRMED: Personality skill ID. Verified via save-diff: 58 (Planning Ahead) -> 73 (Haymaker). Maps to personality_skills table.', 'HIGH', 'NEW'),
     'talent_acc':        (0x0FC, 'I',  'CONFIRMED: Hidden talent accumulator*. Per-Digimon, NOT global. +500 on evolution (verified via save-diff). On evo, game sets talent_raw = this value. Displayed talent = floor(this / 1000). *Two Digimon of the same species must not share this value.', 'HIGH', 'NEW'),
 
     # ── Talent & ABI ──

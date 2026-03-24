@@ -128,6 +128,22 @@ class IdentityEditor(QWidget):
         pers_row.addWidget(self._pers_combo)
         pers_row.addStretch()
 
+        # Personality skill dropdown
+        self._pskill_combo = QComboBox()
+        self._pskill_combo.setFixedHeight(22)
+        from save_data import _get_db as _db
+        _pskill_db = _db()
+        self._pskill_combo.addItem("(None)", 0)
+        for row in _pskill_db.execute(
+                "SELECT ps.id, psn.name, ps.description FROM personality_skills ps "
+                "LEFT JOIN personality_skill_names psn ON psn.key = CAST(ps.id AS TEXT) "
+                "WHERE ps.description IS NOT NULL ORDER BY ps.id"):
+            desc = (row["description"] or "")[:50].replace("\n", " ")
+            label = f"#{row['id']}: {desc}"
+            self._pskill_combo.addItem(label, row["id"])
+        self._pskill_combo.currentIndexChanged.connect(self._on_pskill_changed)
+        info.addWidget(self._pskill_combo)
+
         self._change_btn = QPushButton("Change Species...")
         self._change_btn.setFixedWidth(120)
         self._change_btn.setFixedHeight(22)
@@ -349,6 +365,10 @@ class IdentityEditor(QWidget):
         if idx >= 0:
             self._pers_combo.setCurrentIndex(idx)
 
+        pskill_idx = self._pskill_combo.findData(entry.get("pers_skill_id", 0))
+        if pskill_idx >= 0:
+            self._pskill_combo.setCurrentIndex(pskill_idx)
+
         self._talent_spin.setValue(entry["talent"])
         self._bond_slider.setValue(entry["bond"])
         self._bond_label.setText(f"{entry['bond']}%")
@@ -407,6 +427,10 @@ class IdentityEditor(QWidget):
     def _on_pers_changed(self, idx):
         if not self._updating and idx >= 0:
             self.field_changed.emit("personality", self._pers_combo.itemData(idx))
+
+    def _on_pskill_changed(self, idx):
+        if not self._updating and idx >= 0:
+            self.field_changed.emit("pers_skill", self._pskill_combo.itemData(idx))
 
     def _on_bond_changed(self, value):
         self._bond_label.setText(f"{value}%")
