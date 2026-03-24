@@ -128,21 +128,22 @@ class IdentityEditor(QWidget):
         pers_row.addWidget(self._pers_combo)
         pers_row.addStretch()
 
-        # Personality skill dropdown
+        # Personality skill dropdown — clean descriptions, no formatting codes
+        import re
         self._pskill_combo = QComboBox()
         self._pskill_combo.setFixedHeight(22)
+        self._pskill_combo.setMaxVisibleItems(20)
         from save_data import _get_db as _db
         _pskill_db = _db()
         self._pskill_combo.addItem("(None)", 0)
         for row in _pskill_db.execute(
-                "SELECT ps.id, psn.name, ps.description FROM personality_skills ps "
-                "LEFT JOIN personality_skill_names psn ON psn.key = CAST(ps.id AS TEXT) "
-                "WHERE ps.description IS NOT NULL ORDER BY ps.id"):
-            desc = (row["description"] or "")[:50].replace("\n", " ")
-            label = f"#{row['id']}: {desc}"
-            self._pskill_combo.addItem(label, row["id"])
+                "SELECT id, description FROM personality_skills "
+                "WHERE description IS NOT NULL ORDER BY id"):
+            desc = re.sub(r'\{[^}]+\}', '', row["description"] or "")
+            desc = desc.replace('\n', ' ').strip()[:65]
+            self._pskill_combo.addItem(desc, row["id"])
         self._pskill_combo.currentIndexChanged.connect(self._on_pskill_changed)
-        info.addWidget(self._pskill_combo)
+        pers_row.addWidget(self._pskill_combo, 1)
 
         self._change_btn = QPushButton("Change Species...")
         self._change_btn.setFixedWidth(120)
