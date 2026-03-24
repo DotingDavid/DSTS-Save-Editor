@@ -80,17 +80,33 @@ def get_growth_type(db_id):
     return row["growth_type"] if row else 1
 
 
-def get_exp_for_level(level):
-    """Look up the total EXP required for a given level.
+def detect_exp_curve(current_level, current_exp):
+    """Detect which EXP curve a Digimon is on from their current data.
 
-    Uses curve 4 (highest thresholds) to guarantee the EXP is sufficient
-    for ANY species. Different species use different curves (1-4) based
-    on growth_type, but the exact mapping isn't fully confirmed. Curve 4
-    is always safe — species on lower curves just get extra EXP.
+    Returns the curve_id (1-4). Uses the highest curve whose threshold
+    at the current level is <= the Digimon's actual EXP.
+    """
+    db = _get_db()
+    best = 1
+    for c in [1, 2, 3, 4]:
+        row = db.execute(
+            "SELECT total_exp FROM experience_curves WHERE curve_id = ? AND level = ?",
+            (c, current_level)
+        ).fetchone()
+        if row and row["total_exp"] <= current_exp:
+            best = c
+    return best
+
+
+def get_exp_for_level(level, curve_id=4):
+    """Look up the total EXP required for a given level on a specific curve.
+
+    Default curve_id=4 (highest) is safe for any species. Pass a detected
+    curve_id for accurate per-Digimon EXP.
     """
     row = _get_db().execute(
-        "SELECT total_exp FROM experience_curves WHERE curve_id = 4 AND level = ?",
-        (level,)
+        "SELECT total_exp FROM experience_curves WHERE curve_id = ? AND level = ?",
+        (curve_id, level)
     ).fetchone()
     return row["total_exp"] if row else 0
 
@@ -752,8 +768,8 @@ class SaveFile:
             if e["db_id"] == db_id:
                 max_acc = max(max_acc, e.get("talent_acc", 0))
         struct.pack_into('<I', self._data, dest + 0xFC, max_acc + 1)
-        # EXP for level
-        exp = get_exp_for_level(level)
+        # EXP for level — use curve 4 (safest for new Digimon)
+        exp = get_exp_for_level(level, curve_id=4)
         struct.pack_into('<I', self._data, dest + 0x64, exp)
         # Box (not party)
         struct.pack_into('<I', self._data, dest + 0x11C, 0)

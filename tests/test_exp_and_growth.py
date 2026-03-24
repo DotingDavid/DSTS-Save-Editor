@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import save_crypto
 from save_data import (SaveFile, _get_db, get_growth_type, get_exp_for_level,
-                        get_growth_stats, get_base_stats)
+                        get_growth_stats, get_base_stats, detect_exp_curve)
 
 
 SAVE_DIR = os.path.join(
@@ -92,15 +92,41 @@ class TestExpAgainstSaveData(unittest.TestCase):
             f"{len(failures)} Digimon have EXP below curve 1 threshold:\n" +
             "\n".join(failures))
 
-    def test_get_exp_uses_curve_4(self):
-        """get_exp_for_level should return curve 4 (highest) thresholds."""
+    def test_get_exp_defaults_to_curve_4(self):
+        """get_exp_for_level with no curve should return curve 4 (highest)."""
         db = _get_db()
         for lv in [10, 50, 99]:
             row = db.execute(
                 "SELECT total_exp FROM experience_curves WHERE curve_id = 4 AND level = ?",
                 (lv,)).fetchone()
             self.assertEqual(get_exp_for_level(lv), row['total_exp'],
-                f"get_exp_for_level({lv}) should return curve 4 value")
+                f"get_exp_for_level({lv}) should default to curve 4")
+
+    def test_get_exp_with_specific_curve(self):
+        """get_exp_for_level with explicit curve_id should use that curve."""
+        db = _get_db()
+        for c in [1, 2, 3, 4]:
+            row = db.execute(
+                "SELECT total_exp FROM experience_curves WHERE curve_id = ? AND level = 50",
+                (c,)).fetchone()
+            self.assertEqual(get_exp_for_level(50, curve_id=c), row['total_exp'])
+
+    def test_detect_curve_returns_valid(self):
+        """detect_exp_curve should return 1-4."""
+        for e in self.roster[:10]:
+            curve = detect_exp_curve(e['level'], e['exp'])
+            self.assertIn(curve, [1, 2, 3, 4])
+
+    def test_detected_curve_exp_fits(self):
+        """EXP from detected curve at current level should be <= actual EXP."""
+        db = _get_db()
+        for e in self.roster:
+            curve = detect_exp_curve(e['level'], e['exp'])
+            row = db.execute(
+                "SELECT total_exp FROM experience_curves WHERE curve_id = ? AND level = ?",
+                (curve, e['level'])).fetchone()
+            self.assertLessEqual(row['total_exp'], e['exp'],
+                f"{e['species']} Lv{e['level']}: curve {curve} threshold {row['total_exp']} > EXP {e['exp']}")
 
     def test_roster_not_empty(self):
         self.assertGreater(len(self.roster), 0, "Roster should not be empty")

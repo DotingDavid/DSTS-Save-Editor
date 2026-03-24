@@ -484,11 +484,12 @@ class MainWindow(QMainWindow):
             old_level = self._current_entry["level"]
             self._save_file.write_level(offset, value)
             # Auto-update EXP and white stats to match new level
-            from save_data import get_growth_type, get_exp_for_level, get_growth_stats
+            from save_data import get_growth_type, get_exp_for_level, get_growth_stats, detect_exp_curve
             db_id = self._current_entry["db_id"]
             gt = get_growth_type(db_id)
-            # Set EXP to minimum required for new level
-            new_exp = get_exp_for_level(value)
+            # Detect which EXP curve this Digimon is on, then set correct EXP
+            curve = detect_exp_curve(old_level, self._current_entry["exp"])
+            new_exp = get_exp_for_level(value, curve)
             self._save_file.write_exp(offset, new_exp)
             # Adjust white stats by growth curve delta
             old_growth = get_growth_stats(gt, old_level)
