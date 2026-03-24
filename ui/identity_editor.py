@@ -276,7 +276,7 @@ class IdentityEditor(QWidget):
 
         meta_grid.addWidget(_label("Evo Counter:"), 0, 0)
         self._evo_spin = QSpinBox()
-        self._evo_spin.setRange(0, 255)
+        self._evo_spin.setRange(0, 100)
         self._evo_spin.setStyleSheet(_SPIN_STYLE)
         self._evo_spin.setToolTip("Reset to 0 for unlimited blue stat gains from evolution")
         self._evo_spin.valueChanged.connect(lambda v: self._emit("evo_fwd_count", v))
@@ -288,12 +288,20 @@ class IdentityEditor(QWidget):
             f"color: {TEXT_VALUE}; font-size: 11px; border: none; background: transparent;")
         meta_grid.addWidget(self._transforms, 0, 3)
 
-        meta_grid.addWidget(_label("Hash:"), 1, 0)
+        meta_grid.addWidget(_label("Talent Acc*:"), 1, 0)
+        self._tick_spin = QSpinBox()
+        self._tick_spin.setRange(0, 999_999_999)
+        self._tick_spin.setStyleSheet(_SPIN_STYLE)
+        self._tick_spin.setToolTip("Hidden talent accumulator*. +500 on evolution. On evo, talent = floor(this / 1000).\n*Must be unique per species — duplicates auto-fixed on save.")
+        self._tick_spin.valueChanged.connect(lambda v: self._emit("talent_acc", v))
+        meta_grid.addWidget(self._tick_spin, 1, 1)
+
+        meta_grid.addWidget(_label("Hash:"), 1, 2)
         self._hash = QLabel("—")
         self._hash.setStyleSheet(
             f"color: {TEXT_SECONDARY}; font-size: 10px; font-family: monospace; "
             f"border: none; background: transparent;")
-        meta_grid.addWidget(self._hash, 1, 1, 1, 3)
+        meta_grid.addWidget(self._hash, 1, 3)
 
         evo_layout.addLayout(meta_grid)
 
@@ -357,6 +365,7 @@ class IdentityEditor(QWidget):
 
         self._evo_spin.setValue(entry["evo_fwd_count"])
         self._transforms.setText(str(entry.get("total_transforms", 0)))
+        self._tick_spin.setValue(entry.get("talent_acc", 0))
         self._hash.setText(f"0x{entry.get('creation_hash', 0):08X}")
 
         # Evo history

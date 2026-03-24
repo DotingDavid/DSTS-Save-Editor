@@ -43,7 +43,7 @@ class TestExpCurve(unittest.TestCase):
 
     def test_level_99_is_max(self):
         exp = get_exp_for_level(99)
-        self.assertEqual(exp, 4800000)
+        self.assertEqual(exp, 7500000)  # curve 4 (highest)
 
     def test_exp_increases_with_level(self):
         prev = 0
@@ -76,10 +76,14 @@ class TestExpAgainstSaveData(unittest.TestCase):
         cls.roster = cls.sf.read_roster()
 
     def test_all_digimon_exp_fits_curve_1(self):
-        """Every Digimon's EXP should be >= curve 1 threshold for its level."""
+        """Every Digimon's EXP should be >= curve 1 (minimum) threshold."""
+        db = _get_db()
         failures = []
         for e in self.roster:
-            threshold = get_exp_for_level(e['level'])
+            row = db.execute(
+                "SELECT total_exp FROM experience_curves WHERE curve_id = 1 AND level = ?",
+                (e['level'],)).fetchone()
+            threshold = row['total_exp'] if row else 0
             if e['exp'] < threshold:
                 name = e.get('nickname') or e['species']
                 failures.append(
@@ -87,6 +91,16 @@ class TestExpAgainstSaveData(unittest.TestCase):
         self.assertEqual(failures, [],
             f"{len(failures)} Digimon have EXP below curve 1 threshold:\n" +
             "\n".join(failures))
+
+    def test_get_exp_uses_curve_4(self):
+        """get_exp_for_level should return curve 4 (highest) thresholds."""
+        db = _get_db()
+        for lv in [10, 50, 99]:
+            row = db.execute(
+                "SELECT total_exp FROM experience_curves WHERE curve_id = 4 AND level = ?",
+                (lv,)).fetchone()
+            self.assertEqual(get_exp_for_level(lv), row['total_exp'],
+                f"get_exp_for_level({lv}) should return curve 4 value")
 
     def test_roster_not_empty(self):
         self.assertGreater(len(self.roster), 0, "Roster should not be empty")

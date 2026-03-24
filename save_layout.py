@@ -322,7 +322,7 @@ DIGI = {
     'origin_area_1':    (0x0F0, 'I',  'Capture area indicator 1 (0-127). Digimon caught in same area have same value. Encodes WHERE obtained', 'HIGH', 'NEW'),
     'origin_area_2':    (0x0F4, 'I',  'Capture area indicator 2 (0-127). Paired with F0 to form area+sub-area. Same batch = same values', 'HIGH', 'NEW'),
     'origin_slot':      (0x0F8, 'I',  'Capture slot/encounter index (1-78). Varies slightly within same-area batches. Sub-area or encounter slot', 'MEDIUM', 'NEW'),
-    'game_tick':         (0x0FC, 'I',  'CONFIRMED: Global game tick counter. Increments by +35 for ALL Digimon per battle (+500 on digivolution). Tracks overall game progression state. Range 27525-81560. NOT per-Digimon — same delta applied globally', 'HIGH', 'NEW'),
+    'talent_acc':        (0x0FC, 'I',  'CONFIRMED: Hidden talent accumulator*. Per-Digimon, NOT global. +500 on evolution (verified via save-diff). On evo, game sets talent_raw = this value. Displayed talent = floor(this / 1000). *Two Digimon of the same species must not share this value.', 'HIGH', 'NEW'),
 
     # ── Talent & ABI ──
     'talent_raw':       (0x100, 'I',  'Talent (stored x1000, divide for display)',            'HIGH',   'USED'),

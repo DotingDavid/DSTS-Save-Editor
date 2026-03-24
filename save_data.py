@@ -83,11 +83,13 @@ def get_growth_type(db_id):
 def get_exp_for_level(level):
     """Look up the total EXP required for a given level.
 
-    The game uses experience curve 1 for all species.
-    growth_type only affects stat growth, not EXP thresholds.
+    Uses curve 4 (highest thresholds) to guarantee the EXP is sufficient
+    for ANY species. Different species use different curves (1-4) based
+    on growth_type, but the exact mapping isn't fully confirmed. Curve 4
+    is always safe — species on lower curves just get extra EXP.
     """
     row = _get_db().execute(
-        "SELECT total_exp FROM experience_curves WHERE curve_id = 1 AND level = ?",
+        "SELECT total_exp FROM experience_curves WHERE curve_id = 4 AND level = ?",
         (level,)
     ).fetchone()
     return row["total_exp"] if row else 0
@@ -531,6 +533,7 @@ class SaveFile:
             "equip_1": struct.unpack('<h', d[offset + 0x130:offset + 0x132])[0],
             "equip_2": struct.unpack('<h', d[offset + 0x132:offset + 0x134])[0],
             "attach_skills": [struct.unpack('<H', d[offset + 0x120 + s * 4:offset + 0x122 + s * 4])[0] for s in range(4)],
+            "talent_acc": struct.unpack('<I', d[offset + 0xFC:offset + 0x100])[0],
             "location": region if region == "farm" else "box",
             "evo_history": evo_history,
         }
@@ -581,6 +584,10 @@ class SaveFile:
             self._data[entry_offset + i] = b
         self._mark_dirty()
 
+    def write_talent_acc(self, entry_offset, value):
+        """Write the hidden talent accumulator* at +0xFC."""
+        self.write_u32(entry_offset + 0xFC, value)
+
     def write_white_stat(self, entry_offset, stat_index, value):
         """Write a white (growth) stat. stat_index: 0=HP, 1=SP, 2=ATK, etc."""
         offset = entry_offset + 0x74 + stat_index * 4
@@ -605,8 +612,8 @@ class SaveFile:
 
     def write_evo_counter(self, entry_offset, count):
         """Write the evolution blue stat grant counter at +0xC8."""
-        if not (0 <= count <= 255):
-            raise ValueError(f"Evo counter must be 0-255, got {count}")
+        if not (0 <= count <= 100):
+            raise ValueError(f"Evo counter must be 0-100, got {count}")
         self.write_u8(entry_offset + 0xC8, count)
 
     def write_attach_skill(self, entry_offset, slot_index, skill_id):
@@ -685,6 +692,10 @@ class SaveFile:
         new_hash = random.randint(0x1000, 0xFFFFFFFF)
         struct.pack_into('<I', self._data, dest + 0x148, new_hash)
 
+        # Unique talent accumulator — increment source by 1 for uniqueness*
+        src_acc = struct.unpack('<I', self._data[source_offset + 0xFC:source_offset + 0x100])[0]
+        struct.pack_into('<I', self._data, dest + 0xFC, src_acc + 1)
+
         # Reset evo counter
         self._data[dest + 0xC8] = 0
 
@@ -734,6 +745,16 @@ class SaveFile:
         # Creation hash
         new_hash = random.randint(0x1000, 0xFFFFFFFF)
         struct.pack_into('<I', self._data, dest + 0x148, new_hash)
+        # Talent accumulator — find max for this species and add 1 for uniqueness
+        roster = self.read_roster()
+        max_acc = 0
+        for e in roster:
+            if e["db_id"] == db_id:
+                max_acc = max(max_acc, e.get("talent_acc", 0))
+        struct.pack_into('<I', self._data, dest + 0xFC, max_acc + 1)
+        # EXP for level
+        exp = get_exp_for_level(level)
+        struct.pack_into('<I', self._data, dest + 0x64, exp)
         # Box (not party)
         struct.pack_into('<I', self._data, dest + 0x11C, 0)
         # Active
@@ -871,12 +892,41 @@ class SaveFile:
 
     # ── Save to disk ──
 
+    def _fix_duplicate_talent_acc(self):
+        """Ensure no two Digimon of the same species share a talent accumulator*.
+
+        The game requires unique (db_id, talent_acc) pairs. When duplicates
+        exist (e.g., from cloning or creating multiple of the same species),
+        auto-increment the accumulator on duplicates by +1 each.
+        """
+        roster = self.read_roster()
+        by_species = {}
+        for entry in roster:
+            by_species.setdefault(entry["db_id"], []).append(entry)
+
+        for db_id, entries in by_species.items():
+            if len(entries) < 2:
+                continue
+            seen = set()
+            for entry in entries:
+                acc = entry["talent_acc"]
+                if acc in seen:
+                    while acc in seen:
+                        acc += 1
+                    self.write_talent_acc(entry["_offset"], acc)
+                    logger.info("Fixed duplicate talent_acc for %s at 0x%X: set to %d",
+                                entry["species"], entry["_offset"], acc)
+                seen.add(acc)
+
     def save(self, backup=True, max_backups=2):
         """Encrypt and write back to disk. Creates a timestamped backup first.
 
         Keeps only the most recent max_backups auto-generated backups per slot
         to avoid filling the disk.
         """
+        # Fix duplicate game ticks before writing
+        self._fix_duplicate_talent_acc()
+
         if backup and os.path.exists(self.path):
             backup_dir = os.path.join(os.path.dirname(self.path), 'backups')
             os.makedirs(backup_dir, exist_ok=True)

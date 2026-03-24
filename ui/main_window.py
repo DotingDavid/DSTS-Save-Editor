@@ -536,6 +536,8 @@ class MainWindow(QMainWindow):
             self._save_file.write_cur_hp(offset, value)
         elif field == "cur_sp":
             self._save_file.write_cur_sp(offset, value)
+        elif field == "talent_acc":
+            self._save_file.write_talent_acc(offset, value)
         elif field == "species_change":
             self._save_file.change_species(offset, value)
             # Reload roster and refresh
