@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import save_crypto
 from save_data import (SaveFile, _get_db, get_growth_type, get_exp_for_level,
-                        get_growth_stats, get_base_stats, detect_exp_curve)
+                        get_growth_stats, get_base_stats, get_exp_curve)
 
 
 SAVE_DIR = os.path.join(
@@ -42,8 +42,8 @@ class TestExpCurve(unittest.TestCase):
         self.assertEqual(get_exp_for_level(1), 0)
 
     def test_level_99_is_max(self):
-        exp = get_exp_for_level(99)
-        self.assertEqual(exp, 7500000)  # curve 4 (highest)
+        exp = get_exp_for_level(99)  # defaults to curve 4
+        self.assertEqual(exp, 7500000)
 
     def test_exp_increases_with_level(self):
         prev = 0
@@ -111,22 +111,18 @@ class TestExpAgainstSaveData(unittest.TestCase):
                 (c,)).fetchone()
             self.assertEqual(get_exp_for_level(50, curve_id=c), row['total_exp'])
 
-    def test_detect_curve_returns_valid(self):
-        """detect_exp_curve should return 1-4."""
+    def test_species_curve_returns_valid(self):
+        """get_exp_curve should return 1-4 for all roster Digimon."""
         for e in self.roster[:10]:
-            curve = detect_exp_curve(e['level'], e['exp'])
+            curve = get_exp_curve(e['db_id'])
             self.assertIn(curve, [1, 2, 3, 4])
 
-    def test_detected_curve_exp_fits(self):
-        """EXP from detected curve at current level should be <= actual EXP."""
-        db = _get_db()
+    def test_species_curve_exp_fits(self):
+        """EXP from species curve at current level should be <= actual EXP."""
         for e in self.roster:
-            curve = detect_exp_curve(e['level'], e['exp'])
-            row = db.execute(
-                "SELECT total_exp FROM experience_curves WHERE curve_id = ? AND level = ?",
-                (curve, e['level'])).fetchone()
-            self.assertLessEqual(row['total_exp'], e['exp'],
-                f"{e['species']} Lv{e['level']}: curve {curve} threshold {row['total_exp']} > EXP {e['exp']}")
+            threshold = get_exp_for_level(e['level'], db_id=e['db_id'])
+            self.assertLessEqual(threshold, e['exp'],
+                f"{e['species']} Lv{e['level']}: threshold {threshold} > EXP {e['exp']}")
 
     def test_roster_not_empty(self):
         self.assertGreater(len(self.roster), 0, "Roster should not be empty")

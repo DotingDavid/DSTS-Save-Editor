@@ -80,30 +80,22 @@ def get_growth_type(db_id):
     return row["growth_type"] if row else 1
 
 
-def detect_exp_curve(current_level, current_exp):
-    """Detect which EXP curve a Digimon is on from their current data.
+def get_exp_curve(db_id):
+    """Look up the EXP curve for a species. Returns curve_id (1-4)."""
+    row = _get_db().execute(
+        "SELECT exp_curve FROM digimon WHERE id = ?", (db_id,)
+    ).fetchone()
+    return row["exp_curve"] if row and row["exp_curve"] else 1
 
-    Returns the curve_id (1-4). Uses the highest curve whose threshold
-    at the current level is <= the Digimon's actual EXP.
+
+def get_exp_for_level(level, curve_id=None, db_id=None):
+    """Look up the total EXP required for a given level.
+
+    Pass db_id to auto-detect the species' curve, or curve_id to specify
+    explicitly. If neither is given, defaults to curve 4 (safest).
     """
-    db = _get_db()
-    best = 1
-    for c in [1, 2, 3, 4]:
-        row = db.execute(
-            "SELECT total_exp FROM experience_curves WHERE curve_id = ? AND level = ?",
-            (c, current_level)
-        ).fetchone()
-        if row and row["total_exp"] <= current_exp:
-            best = c
-    return best
-
-
-def get_exp_for_level(level, curve_id=4):
-    """Look up the total EXP required for a given level on a specific curve.
-
-    Default curve_id=4 (highest) is safe for any species. Pass a detected
-    curve_id for accurate per-Digimon EXP.
-    """
+    if curve_id is None:
+        curve_id = get_exp_curve(db_id) if db_id else 4
     row = _get_db().execute(
         "SELECT total_exp FROM experience_curves WHERE curve_id = ? AND level = ?",
         (curve_id, level)
@@ -768,8 +760,8 @@ class SaveFile:
             if e["db_id"] == db_id:
                 max_acc = max(max_acc, e.get("talent_acc", 0))
         struct.pack_into('<I', self._data, dest + 0xFC, max_acc + 1)
-        # EXP for level — use curve 4 (safest for new Digimon)
-        exp = get_exp_for_level(level, curve_id=4)
+        # EXP for level — use this species' actual curve
+        exp = get_exp_for_level(level, db_id=db_id)
         struct.pack_into('<I', self._data, dest + 0x64, exp)
         # Box (not party)
         struct.pack_into('<I', self._data, dest + 0x11C, 0)
