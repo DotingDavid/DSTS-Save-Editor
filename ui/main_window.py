@@ -12,7 +12,9 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
 from PyQt6.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
 
-from save_data import SaveFile, is_game_running, VERSION
+from save_data import (SaveFile, is_game_running, VERSION,
+                       find_save_directory, get_stamp_consent,
+                       set_stamp_consent, stamp_all_saves)
 from app_paths import get_app_icon_path
 from ui.style import (GLOBAL_STYLESHEET, BG_PANEL, BG_INPUT, BG_HEADER,
                        BORDER, ACCENT, TEXT_SECONDARY, TEXT_DISABLED,
@@ -67,6 +69,47 @@ class MainWindow(QMainWindow):
         self._process_timer = QTimer()
         self._process_timer.timeout.connect(self._check_game_process)
         self._process_timer.start(5000)
+
+        # Check stamp consent on startup
+        QTimer.singleShot(500, self._check_stamp_consent)
+
+    def _check_stamp_consent(self):
+        """Check if user has consented to save stamping. Ask if first launch."""
+        save_dir = find_save_directory()
+        if not save_dir:
+            return
+
+        consent = get_stamp_consent(save_dir)
+        if consent is True:
+            # Already consented — stamp any new unstamped slots
+            stamp_all_saves(save_dir)
+        elif consent is False:
+            # Declined — do nothing
+            pass
+        elif consent is None:
+            # First launch — ask
+            reply = QMessageBox.question(
+                self, "ANAMNESIS — Save File Identification",
+                "ANAMNESIS SE would like to write a small identifier (UUID) "
+                "into each of your save files.\n\n"
+                "This uses unused space in the save data that the game "
+                "ignores. It allows ANAMNESIS tools to track your "
+                "collection and settings separately for each save slot.\n\n"
+                "A backup of each save will be created before any changes "
+                "are made, stored in a 'pre_signature_backups' folder next "
+                "to your saves. You can restore these backups at any time "
+                "from the File Manager.\n\n"
+                "If you decline, some features may not work correctly "
+                "across multiple save files.\n\n"
+                "You can remove the signature from any save later via "
+                "File Manager > Unsign Selected Save.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                set_stamp_consent(save_dir, True)
+                results = stamp_all_saves(save_dir)
+                show_toast(self, f"Signed {len(results)} save files", "success")
+            else:
+                set_stamp_consent(save_dir, False)
 
     # ── Toolbar ──
 

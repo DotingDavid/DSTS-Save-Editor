@@ -175,6 +175,34 @@ def stamp_save_uid(path: str) -> str | None:
     return uid
 
 
+def _consent_path(save_dir: str) -> str:
+    """Path to the stamp consent file."""
+    return os.path.join(save_dir, 'stamp_consent.json')
+
+
+def get_stamp_consent(save_dir: str) -> bool | None:
+    """Check stamp consent state.
+
+    Returns True (consented), False (declined), or None (never asked).
+    """
+    path = _consent_path(save_dir)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, 'r') as f:
+            data = json.load(f)
+        return data.get("consented")
+    except Exception:
+        return None
+
+
+def set_stamp_consent(save_dir: str, consented: bool):
+    """Record the user's stamp consent decision."""
+    path = _consent_path(save_dir)
+    with open(path, 'w') as f:
+        json.dump({"consented": consented}, f)
+
+
 def stamp_all_saves(save_dir: str) -> dict[str, str]:
     """Stamp all unstamped save files in a directory. Skip slot 0000.
 
@@ -452,14 +480,8 @@ class SaveFile:
             raw = f.read()
         self._data = bytearray(save_crypto.decrypt(raw))
         self._dirty = False
-        # Read or generate save UID
+        # Read existing UID only — stamping requires user consent first
         self._uid = read_save_uid(self._data)
-        if not self._uid:
-            steam_id, slot = _extract_steam_id_and_slot(path)
-            if steam_id and slot and slot != AUTOSAVE_SLOT:
-                self._uid = generate_save_uid(steam_id, slot)
-                write_save_uid(self._data, VERSION, self._uid)
-                self._dirty = True
 
     @property
     def uid(self):
