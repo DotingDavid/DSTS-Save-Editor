@@ -242,6 +242,27 @@ class FileManagerPanel(QWidget):
 
         layout.addWidget(splitter)
 
+        # ═══ SIGNATURE SECTION ═══
+        sig_row = QHBoxLayout()
+        sig_row.setSpacing(6)
+
+        sig_header = QLabel("SIGNATURE")
+        sig_header.setStyleSheet(
+            f"color: rgba(0,191,255,0.5); font-size: 9px; font-weight: bold; "
+            f"letter-spacing: 3px; background: transparent;")
+        sig_row.addWidget(sig_header)
+        sig_row.addStretch()
+
+        btn = _action_btn("Restore Pre-Signature Backup", "129, 199, 132")
+        btn.clicked.connect(self._restore_pre_signature)
+        sig_row.addWidget(btn)
+
+        btn = _action_btn("Unsign Selected Save", danger=True)
+        btn.clicked.connect(self._unsign_save)
+        sig_row.addWidget(btn)
+
+        layout.addLayout(sig_row)
+
     # ── Data ──
 
     def _refresh(self):
@@ -540,3 +561,71 @@ class FileManagerPanel(QWidget):
                     self, "Partial Failure",
                     f"Failed to delete {failed} of {len(files)} backups.")
             self._refresh()
+
+    # ── Signature Actions ──
+
+    def _restore_pre_signature(self):
+        path, num = self._selected_slot()
+        if not path:
+            return
+        slot_str = f"{num:04d}"
+        pre_sig_dir = os.path.join(self._save_dir, 'pre_signature_backups')
+        backup_path = os.path.join(pre_sig_dir, f"{slot_str}.bin")
+        if not os.path.exists(backup_path):
+            QMessageBox.information(
+                self, "No Backup",
+                f"No pre-signature backup exists for slot {slot_str}.\n\n"
+                "This save was either never signed by ANAMNESIS, or the "
+                "backup was already restored/deleted.")
+            return
+        reply = QMessageBox.question(
+            self, "Restore Pre-Signature Backup",
+            f"Restore slot {slot_str} to its original state from before "
+            f"ANAMNESIS first signed it?\n\n"
+            f"This will undo ALL changes made by ANAMNESIS SE — your save "
+            f"will be exactly as it was before you ever used this tool.\n\n"
+            f"Any edits you made (stats, skills, levels, etc.) will be lost.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            from save_data import restore_pre_signature_backup
+            restore_pre_signature_backup(self._save_dir, slot_str)
+            from ui.toast import show_toast
+            show_toast(self.window(), f"Restored pre-signature backup for slot {slot_str}", "success")
+            self._refresh()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+
+    def _unsign_save(self):
+        path, num = self._selected_slot()
+        if not path:
+            return
+        slot_str = f"{num:04d}"
+        if slot_str == '0000':
+            QMessageBox.information(
+                self, "Autosave",
+                "The autosave (slot 0000) cannot be unsigned directly.\n\n"
+                "It inherits the signature from whichever slot you load in-game. "
+                "Unsign the source slot instead.")
+            return
+        reply = QMessageBox.question(
+            self, "Unsign Save",
+            f"Remove the ANAMNESIS signature from slot {slot_str}?\n\n"
+            f"This only removes the signature — your edits and Digimon "
+            f"data are NOT affected. The save will look like it was never "
+            f"touched by ANAMNESIS.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            from save_data import unsign_save
+            if unsign_save(path):
+                from ui.toast import show_toast
+                show_toast(self.window(), f"Unsigned slot {slot_str}", "success")
+            else:
+                QMessageBox.information(self, "Not Signed",
+                    f"Slot {slot_str} doesn't have an ANAMNESIS signature.")
+            self._refresh()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))

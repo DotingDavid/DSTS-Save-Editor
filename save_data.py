@@ -73,6 +73,49 @@ def write_save_uid(data: bytearray, uid: str):
     data[SAVE_UID_OFFSET + len(sig)] = 0
 
 
+def unsign_save(path: str):
+    """Remove the ANAMNESIS signature from a save file.
+
+    Zeroes out the signature region at 0x904, restoring it to the
+    state the game originally had (all zeros in the padding region).
+    """
+    with open(path, 'rb') as f:
+        raw = f.read()
+    data = bytearray(save_crypto.decrypt(raw))
+
+    # Check if there's actually a signature
+    if not read_save_uid(data):
+        return False
+
+    # Zero out the signature region
+    for i in range(80):
+        data[SAVE_UID_OFFSET + i] = 0
+
+    encrypted = save_crypto.encrypt(bytes(data))
+    with open(path, 'wb') as f:
+        f.write(encrypted)
+    logger.info("Unsigned save: %s", path)
+    return True
+
+
+def restore_pre_signature_backup(save_dir: str, slot_str: str) -> bool:
+    """Restore a pre-signature backup for a specific slot.
+
+    Copies the original unsigned save from pre_signature_backups/ back
+    to the save directory, overwriting the current (signed) version.
+    """
+    pre_sig_dir = os.path.join(save_dir, 'pre_signature_backups')
+    backup_path = os.path.join(pre_sig_dir, f"{slot_str}.bin")
+    dest_path = os.path.join(save_dir, f"{slot_str}.bin")
+
+    if not os.path.exists(backup_path):
+        return False
+
+    shutil.copy2(backup_path, dest_path)
+    logger.info("Restored pre-signature backup for slot %s", slot_str)
+    return True
+
+
 def _extract_steam_id_and_slot(path: str) -> tuple[str | None, str | None]:
     """Extract steam_id and slot number from a save file path.
 
