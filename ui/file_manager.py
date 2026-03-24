@@ -254,10 +254,12 @@ class FileManagerPanel(QWidget):
         sig_row.addStretch()
 
         btn = _action_btn("Restore Pre-Signature Backup", "129, 199, 132")
+        btn.setToolTip("Restore this save to its original state from before ANAMNESIS was used. Undoes all edits.")
         btn.clicked.connect(self._restore_pre_signature)
         sig_row.addWidget(btn)
 
         btn = _action_btn("Unsign Selected Save", danger=True)
+        btn.setToolTip("Remove the ANAMNESIS signature from this save. Your edits are kept — only the signature is removed.")
         btn.clicked.connect(self._unsign_save)
         sig_row.addWidget(btn)
 
