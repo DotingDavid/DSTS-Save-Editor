@@ -35,7 +35,7 @@ VERSION = "1.0.0"
 # in both ANAMNESIS SE and ANAMNESIS Companion.
 ANSE_NAMESPACE = uuid.UUID('f47ac10b-58cc-4372-a567-0e02b2c3d479')
 SAVE_UID_OFFSET = 0x904       # offset in decrypted save data
-SAVE_UID_MAGIC = b'ANSE|'     # magic bytes to detect existing signature
+SAVE_UID_MAGIC = b'ANAMNESIS|' # magic bytes to detect existing signature
 AUTOSAVE_SLOT = '0000'        # never write UID to autosave — read only
 
 
@@ -50,18 +50,23 @@ def generate_save_uid(steam_id: str, slot_number: str) -> str:
 
 
 def read_save_uid(data: bytes) -> str | None:
-    """Read the ANSE UID from decrypted save data. Returns None if not stamped."""
+    """Read the ANAMNESIS UID from decrypted save data. Returns None if not stamped."""
     sig = data[SAVE_UID_OFFSET:SAVE_UID_OFFSET + 80]
     if sig.startswith(SAVE_UID_MAGIC):
         parts = sig.split(b'\x00')[0].decode('ascii', errors='replace').split('|')
+        if len(parts) >= 2:
+            return parts[1]  # the UUID
+    # Backward compat: old format was ANSE|version|uuid
+    if sig.startswith(b'ANSE|'):
+        parts = sig.split(b'\x00')[0].decode('ascii', errors='replace').split('|')
         if len(parts) >= 3:
-            return parts[2]  # the UUID
+            return parts[2]
     return None
 
 
-def write_save_uid(data: bytearray, version: str, uid: str):
-    """Write the ANSE signature into decrypted save data at 0x904."""
-    sig = f"ANSE|{version}|{uid}".encode('ascii')
+def write_save_uid(data: bytearray, uid: str):
+    """Write the ANAMNESIS signature into decrypted save data at 0x904."""
+    sig = f"ANAMNESIS|{uid}".encode('ascii')
     for i, b in enumerate(sig):
         data[SAVE_UID_OFFSET + i] = b
     # Null-terminate
@@ -108,7 +113,7 @@ def stamp_save_uid(path: str) -> str | None:
 
     # Generate and write
     uid = generate_save_uid(steam_id, slot)
-    write_save_uid(data, VERSION, uid)
+    write_save_uid(data, uid)
     encrypted = save_crypto.encrypt(bytes(data))
     with open(path, 'wb') as f:
         f.write(encrypted)
