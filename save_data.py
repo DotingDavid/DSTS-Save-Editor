@@ -15,6 +15,7 @@ import sqlite3
 import base64
 import json
 import subprocess
+import uuid
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,121 @@ from save_layout import (DIGI, REGIONS, AGENT, PERSONALITY_NAMES,
 from app_paths import get_db_path
 
 VERSION = "1.0.0"
+
+# ── Save UID system ──────────────────────────────────────────────────
+# Shared namespace for deterministic UUID generation. MUST be identical
+# in both ANAMNESIS SE and ANAMNESIS Companion.
+ANSE_NAMESPACE = uuid.UUID('f47ac10b-58cc-4372-a567-0e02b2c3d479')
+SAVE_UID_OFFSET = 0x904       # offset in decrypted save data
+SAVE_UID_MAGIC = b'ANSE|'     # magic bytes to detect existing signature
+AUTOSAVE_SLOT = '0000'        # never write UID to autosave — read only
+
+
+def generate_save_uid(steam_id: str, slot_number: str) -> str:
+    """Generate a deterministic UUID for a save slot.
+
+    Same inputs → same output, every time, in any language.
+    Both ANAMNESIS SE and ANAMNESIS Companion use this exact function
+    with the same ANSE_NAMESPACE to produce identical UUIDs.
+    """
+    return str(uuid.uuid5(ANSE_NAMESPACE, f"{steam_id}:{slot_number}"))
+
+
+def read_save_uid(data: bytes) -> str | None:
+    """Read the ANSE UID from decrypted save data. Returns None if not stamped."""
+    sig = data[SAVE_UID_OFFSET:SAVE_UID_OFFSET + 80]
+    if sig.startswith(SAVE_UID_MAGIC):
+        parts = sig.split(b'\x00')[0].decode('ascii', errors='replace').split('|')
+        if len(parts) >= 3:
+            return parts[2]  # the UUID
+    return None
+
+
+def write_save_uid(data: bytearray, version: str, uid: str):
+    """Write the ANSE signature into decrypted save data at 0x904."""
+    sig = f"ANSE|{version}|{uid}".encode('ascii')
+    for i, b in enumerate(sig):
+        data[SAVE_UID_OFFSET + i] = b
+    # Null-terminate
+    data[SAVE_UID_OFFSET + len(sig)] = 0
+
+
+def _extract_steam_id_and_slot(path: str) -> tuple[str | None, str | None]:
+    """Extract steam_id and slot number from a save file path.
+
+    Expected path: .../savedata/{steam_id}/{slot}.bin
+    """
+    path = os.path.normpath(path)
+    basename = os.path.basename(path)
+    slot = basename.replace('.bin', '') if basename.endswith('.bin') else None
+    parent = os.path.basename(os.path.dirname(path))
+    steam_id = parent if parent.isdigit() else None
+    return steam_id, slot
+
+
+def stamp_save_uid(path: str) -> str | None:
+    """Stamp a save file with a deterministic UID if it doesn't have one.
+
+    Rules:
+    - Slot 0000 (autosave): NEVER write, read only
+    - Slots 0001+: write UUID on first encounter
+    Returns the UID (existing or newly written), or None if autosave.
+    """
+    steam_id, slot = _extract_steam_id_and_slot(path)
+    if not steam_id or not slot:
+        return None
+
+    with open(path, 'rb') as f:
+        raw = f.read()
+    data = bytearray(save_crypto.decrypt(raw))
+
+    # Check existing
+    existing = read_save_uid(data)
+    if existing:
+        return existing
+
+    # Never write to autosave
+    if slot == AUTOSAVE_SLOT:
+        return None
+
+    # Generate and write
+    uid = generate_save_uid(steam_id, slot)
+    write_save_uid(data, VERSION, uid)
+    encrypted = save_crypto.encrypt(bytes(data))
+    with open(path, 'wb') as f:
+        f.write(encrypted)
+    logger.info("Stamped save UID for slot %s: %s", slot, uid)
+    return uid
+
+
+def stamp_all_saves(save_dir: str) -> dict[str, str]:
+    """Stamp all unstamped save files in a directory. Skip slot 0000.
+
+    Call on first launch with game closed. Returns {slot: uid} mapping.
+    """
+    results = {}
+    slots = list_save_slots(save_dir)
+    for slot_num, path, _ in slots:
+        slot_str = f"{slot_num:04d}"
+        if slot_str == AUTOSAVE_SLOT:
+            # Read only for autosave
+            try:
+                with open(path, 'rb') as f:
+                    raw = f.read()
+                data = save_crypto.decrypt(raw)
+                uid = read_save_uid(data)
+                if uid:
+                    results[slot_str] = uid
+            except Exception:
+                pass
+            continue
+        try:
+            uid = stamp_save_uid(path)
+            if uid:
+                results[slot_str] = uid
+        except Exception as e:
+            logger.warning("Failed to stamp slot %s: %s", slot_str, e)
+    return results
 
 
 # ── Database lookups ────────────────────────────────────────────────
@@ -277,6 +393,18 @@ class SaveFile:
             raw = f.read()
         self._data = bytearray(save_crypto.decrypt(raw))
         self._dirty = False
+        # Read or generate save UID
+        self._uid = read_save_uid(self._data)
+        if not self._uid:
+            steam_id, slot = _extract_steam_id_and_slot(path)
+            if steam_id and slot and slot != AUTOSAVE_SLOT:
+                self._uid = generate_save_uid(steam_id, slot)
+                write_save_uid(self._data, VERSION, self._uid)
+                self._dirty = True
+
+    @property
+    def uid(self):
+        return self._uid
 
     @property
     def dirty(self):
