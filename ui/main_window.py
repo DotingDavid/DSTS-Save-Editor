@@ -87,24 +87,61 @@ class MainWindow(QMainWindow):
             # Declined — do nothing
             pass
         elif consent is None:
-            # First launch — ask
-            reply = QMessageBox.question(
-                self, "ANAMNESIS — Save File Identification",
-                "ANAMNESIS SE would like to write a small identifier (UUID) "
-                "into each of your save files.\n\n"
+            # First launch — custom consent dialog
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout
+            dlg = QDialog(self)
+            dlg.setWindowTitle("ANAMNESIS — Save File Identification")
+            dlg.setFixedWidth(480)
+            dlg.setStyleSheet(f"""
+                QDialog {{ background: #0C0C14; color: #E0E0E0; }}
+                QLabel {{ color: #E0E0E0; }}
+                QPushButton {{
+                    background: #1A1A2E; color: #E0E0E0;
+                    border: 1px solid {BORDER}; border-radius: 4px;
+                    padding: 8px 24px; font-size: 12px;
+                }}
+                QPushButton:hover {{ border-color: #00BFFF; color: #00BFFF; }}
+            """)
+            dl = QVBoxLayout(dlg)
+            dl.setSpacing(12)
+            dl.setContentsMargins(24, 20, 24, 20)
+
+            title = QLabel("ANAMNESIS SE would like to write a small "
+                           "identifier (UUID) into each of your save files.")
+            title.setStyleSheet("font-size: 13px; font-weight: bold; color: #00BFFF;")
+            title.setWordWrap(True)
+            dl.addWidget(title)
+
+            body = QLabel(
                 "This uses unused space in the save data that the game "
                 "ignores. It allows ANAMNESIS tools to track your "
                 "collection and settings separately for each save slot.\n\n"
                 "A backup of each save will be created before any changes "
-                "are made, stored in a 'pre_signature_backups' folder next "
-                "to your saves. You can restore these backups at any time "
-                "from the File Manager.\n\n"
+                "are made, stored in a 'pre_signature_backups' folder. "
+                "You can restore these backups at any time from the "
+                "File Manager.\n\n"
                 "If you decline, some features may not work correctly "
                 "across multiple save files.\n\n"
-                "You can remove the signature from any save later via "
-                "File Manager > Unsign Selected Save.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if reply == QMessageBox.StandardButton.Yes:
+                "You can remove the signature later via "
+                "File Manager > Unsign Selected Save.")
+            body.setStyleSheet("font-size: 11px; color: #A0A0B0;")
+            body.setWordWrap(True)
+            dl.addWidget(body)
+
+            btns = QHBoxLayout()
+            btns.addStretch()
+            yes_btn = QPushButton("Yes, sign my saves")
+            yes_btn.setStyleSheet(
+                "background: #1B5E20; color: #81C784; "
+                "border: 1px solid #388E3C; font-weight: bold;")
+            yes_btn.clicked.connect(dlg.accept)
+            btns.addWidget(yes_btn)
+            no_btn = QPushButton("No thanks")
+            no_btn.clicked.connect(dlg.reject)
+            btns.addWidget(no_btn)
+            dl.addLayout(btns)
+
+            if dlg.exec() == QDialog.DialogCode.Accepted:
                 set_stamp_consent(save_dir, True)
                 results = stamp_all_saves(save_dir)
                 show_toast(self, f"Signed {len(results)} save files", "success")
