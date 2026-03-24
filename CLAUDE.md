@@ -54,10 +54,12 @@ DigimonSaveEditor/
 ### Save File Structure (Summary)
 - **Total size:** 3,098,176 bytes (encrypted), same decrypted
 - **Encryption:** AES-128-ECB with fixed key
+- **ANSE watermark:** 0x000904-0x001000 (1,788 bytes safe padding — game never touches, confirmed 3 resave cycles). Format: `ANSE|version|uuid`
 - **Digimon roster:** Party+box at 0x001000 (stride 0x150), farm at 0x053000 (stride 0x158)
 - **Scan table:** 583 entries at 0x05C100, stride 4 (Int16 digi_id + Int16 scan_pct)
 - **Agent info:** At 0x0FDE80 — rank, money, TP, skill counts
 - **Discovery table:** At 0x078000 — 432 flag/id pairs
+- **Per-Digimon padding:** +0x20 to +0x5F (64 bytes zeros per Digimon, potential UUID storage — NOT YET TESTED)
 
 ### Digimon Compact Struct (0x150 bytes, relative to name start)
 | Offset | Size | Field |

@@ -37,7 +37,7 @@ REGIONS = {
     'bitmask_digimon':  (0x000400, 0x000600, 'Field guide bitmask — 311 bits = Digimon seen flags'),
     'bitmask_extended': (0x000600, 0x000900, 'Extended bitmask — 378 more bits (items, skills, quests?)'),
     'battle_count':     (0x000900, 0x000904, 'Total battle/encounter count (Int32, unique location)'),
-    'pre_roster_pad':   (0x000904, 0x001000, 'Empty padding before roster'),
+    'pre_roster_pad':   (0x000904, 0x001000, 'CONFIRMED SAFE: 1788 bytes unused padding. Game never reads/writes this region (verified 3 resave cycles with roster changes). ANAMNESIS SE writes signature here: ANSE|version|uuid'),
 
     # ── Digimon Roster ──
     'roster_party_box': (0x001000, 0x009000, 'Digimon roster — party + box (~87 entries, stride 0x150)'),
