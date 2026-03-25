@@ -70,16 +70,18 @@ class MainWindow(QMainWindow):
         self._process_timer.timeout.connect(self._check_game_process)
         self._process_timer.start(5000)
 
-        # Check stamp consent on startup
-        QTimer.singleShot(500, self._check_stamp_consent)
+        # Check stamp consent on startup (1.5s delay to ensure window is visible)
+        QTimer.singleShot(1500, self._check_stamp_consent)
 
     def _check_stamp_consent(self):
         """Check if user has consented to save stamping. Ask if first launch."""
         save_dir = find_save_directory()
+        logger.debug("Stamp consent check: save_dir=%s", save_dir)
         if not save_dir:
             return
 
         consent = get_stamp_consent(save_dir)
+        logger.debug("Stamp consent value: %s", consent)
         if consent is True:
             # Already consented — stamp any new unstamped slots
             stamp_all_saves(save_dir)
@@ -96,7 +98,6 @@ class MainWindow(QMainWindow):
                 with open(path, 'rb') as f:
                     raw = f.read()
                 if read_save_uid(save_crypto.decrypt(raw)):
-                    # At least one save is already signed — consent implied
                     set_stamp_consent(save_dir, True)
                     stamp_all_saves(save_dir)
                     return
@@ -104,117 +105,154 @@ class MainWindow(QMainWindow):
                 continue
 
         # Not consented and no saves signed — show consent dialog
-            # First launch — custom consent dialog
-            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout
-            dlg = QDialog(self)
-            dlg.setWindowTitle("ANAMNESIS — Save File Identification")
-            dlg.setFixedWidth(500)
-            # Modal — blocks the main window. User can close the WHOLE app
-            # via taskbar/Alt+F4 on the main window, but can't dismiss
-            # this dialog without choosing.
-            dlg.setModal(True)
-            dlg.setWindowFlags(
-                Qt.WindowType.Dialog |
-                Qt.WindowType.CustomizeWindowHint |
-                Qt.WindowType.WindowTitleHint)
-            dlg.setStyleSheet(f"""
-                QDialog {{ background: #0C0C14; color: #E0E0E0; }}
-                QLabel {{ color: #E0E0E0; }}
-                QPushButton {{
-                    background: #1A1A2E; color: #E0E0E0;
-                    border: 1px solid {BORDER}; border-radius: 4px;
-                    padding: 8px 24px; font-size: 12px;
-                }}
-                QPushButton:hover {{ border-color: #00BFFF; color: #00BFFF; }}
-            """)
-            dl = QVBoxLayout(dlg)
-            dl.setSpacing(10)
-            dl.setContentsMargins(24, 20, 24, 20)
+        logger.debug("Showing stamp consent dialog")
+        # Custom consent dialog
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout
+        dlg = QDialog(self)
+        dlg.setWindowTitle("ANAMNESIS — Save File Identification")
+        dlg.setFixedWidth(560)
+        dlg.setModal(True)
+        dlg.setWindowFlags(
+            Qt.WindowType.Dialog |
+            Qt.WindowType.CustomizeWindowHint |
+            Qt.WindowType.WindowTitleHint |
+            Qt.WindowType.WindowStaysOnTopHint)
+        dlg.setStyleSheet(f"""
+            QDialog {{ background: #0C0C14; color: #E0E0E0; }}
+            QLabel {{ color: #E0E0E0; }}
+            QPushButton {{
+                background: #1A1A2E; color: #E0E0E0;
+                border: 1px solid {BORDER}; border-radius: 4px;
+                padding: 8px 24px; font-size: 12px;
+            }}
+            QPushButton:hover {{ border-color: #00BFFF; color: #00BFFF; }}
+        """)
+        dl = QVBoxLayout(dlg)
+        dl.setSpacing(0)
+        dl.setContentsMargins(28, 10, 28, 20)
 
-            title = QLabel("ANAMNESIS SE would like to write a small "
-                           "identifier (UUID) into each of your save files.")
-            title.setStyleSheet("font-size: 13px; font-weight: bold; color: #00BFFF;")
-            title.setWordWrap(True)
-            dl.addWidget(title)
+        title = QLabel("ANAMNESIS SE needs to <b>identify your save files</b>.")
+        title.setStyleSheet("font-size: 18px; color: #00BFFF;")
+        title.setWordWrap(True)
+        title.setTextFormat(Qt.TextFormat.RichText)
+        title.setContentsMargins(0, 0, 0, 0)
+        dl.addWidget(title)
 
-            body1 = QLabel(
-                "This uses unused space in the save data that the game "
-                "completely ignores. It does not affect your game in any way. "
-                "It simply allows ANAMNESIS tools to track your "
-                "collection and settings separately for each save slot.")
-            body1.setStyleSheet("font-size: 11px; color: #A0A0B0;")
-            body1.setWordWrap(True)
-            dl.addWidget(body1)
+        body1 = QLabel(
+            "A small ID is written into <b>unused space</b> the game ignores. "
+            "Your game is <b>not affected</b> in any way. It simply helps "
+            "ANAMNESIS track each save slot separately.")
+        body1.setStyleSheet("font-size: 13px; color: #E8E8F0;")
+        body1.setWordWrap(True)
+        body1.setTextFormat(Qt.TextFormat.RichText)
+        dl.addWidget(body1)
+        dl.addSpacing(6)
 
-            safe_row = QHBoxLayout()
-            safe_icon = QLabel("\U0001F6E1")  # shield emoji
-            safe_icon.setStyleSheet("font-size: 18px; background: transparent;")
-            safe_icon.setFixedWidth(28)
-            safe_row.addWidget(safe_icon)
-            safe = QLabel(
-                "A backup of every save file will be created automatically "
-                "before any changes are made. You can restore these backups "
-                "at any time from the File Manager.")
-            safe.setStyleSheet("font-size: 12px; color: #81C784; font-weight: bold;")
-            safe.setWordWrap(True)
-            safe_row.addWidget(safe)
-            dl.addLayout(safe_row)
+        comp_row = QHBoxLayout()
+        comp_icon = QLabel()
+        from app_paths import get_data_dir
+        from PyQt6.QtGui import QPixmap
+        icon_path = os.path.join(get_data_dir(), 'anamnesis_logo_icon.png')
+        pm = QPixmap(icon_path)
+        if not pm.isNull():
+            pm = pm.scaled(QSize(36, 36), Qt.AspectRatioMode.KeepAspectRatio,
+                           Qt.TransformationMode.SmoothTransformation)
+            comp_icon.setPixmap(pm)
+        comp_icon.setFixedWidth(42)
+        comp_icon.setStyleSheet("background: transparent;")
+        comp_row.addWidget(comp_icon)
+        companion = QLabel(
+            "Also satisfies the requirements of the "
+            "<b>ANAMNESIS Companion</b> app, which uses the same "
+            "identifier to manage your collection and goals.")
+        companion.setStyleSheet("font-size: 12px; color: #B0B0C0;")
+        companion.setWordWrap(True)
+        companion.setTextFormat(Qt.TextFormat.RichText)
+        comp_row.addWidget(companion)
+        dl.addLayout(comp_row)
+        dl.addSpacing(6)
 
-            warn_row = QHBoxLayout()
-            warn_icon = QLabel("\u26A0")  # warning triangle
-            warn_icon.setStyleSheet("font-size: 18px; color: #EF5350; background: transparent;")
-            warn_icon.setFixedWidth(28)
-            warn_row.addWidget(warn_icon)
-            warn = QLabel(
-                "If you decline, some features will not work correctly "
-                "across multiple save files. Collection data, evolution "
-                "goals, and settings may bleed between saves.")
-            warn.setStyleSheet("font-size: 12px; color: #EF5350; font-weight: bold;")
-            warn.setWordWrap(True)
-            warn_row.addWidget(warn)
-            dl.addLayout(warn_row)
+        safe_row = QHBoxLayout()
+        safe_icon = QLabel("\U0001F6E1")
+        safe_icon.setStyleSheet("font-size: 22px; background: transparent;")
+        safe_icon.setFixedWidth(36)
+        safe_row.addWidget(safe_icon)
+        safe = QLabel(
+            "<b>Automatic backups</b> are created before any changes. "
+            "Restore anytime from the File Manager.")
+        safe.setStyleSheet("font-size: 13px; color: #81C784;")
+        safe.setWordWrap(True)
+        safe.setTextFormat(Qt.TextFormat.RichText)
+        safe_row.addWidget(safe)
+        dl.addLayout(safe_row)
+        dl.addSpacing(6)
 
-            rec_row = QHBoxLayout()
-            rec_icon = QLabel("\u2B50")  # star
-            rec_icon.setStyleSheet("font-size: 16px; background: transparent;")
-            rec_icon.setFixedWidth(28)
-            rec_row.addWidget(rec_icon)
-            recommend = QLabel(
-                "It is recommended that you select Yes. This is perfectly "
-                "safe and can be undone at any time via File Manager > "
-                "Unsign Selected Save.")
-            recommend.setStyleSheet("font-size: 11px; color: #FFD54F;")
-            recommend.setWordWrap(True)
-            rec_row.addWidget(recommend)
-            dl.addLayout(rec_row)
+        warn_box = QWidget()
+        warn_box.setStyleSheet(
+            "background-color: rgba(211, 47, 47, 0.8); "
+            "border-radius: 6px; padding: 2px;")
+        warn_layout = QHBoxLayout(warn_box)
+        warn_layout.setContentsMargins(10, 8, 10, 8)
+        warn_layout.setSpacing(8)
+        warn_icon = QLabel("\u26A0")
+        warn_icon.setStyleSheet("font-size: 22px; color: #FFFFFF; background: transparent;")
+        warn_icon.setFixedWidth(36)
+        warn_layout.addWidget(warn_icon)
+        warn = QLabel(
+            "Declining may cause <b>data to bleed between saves</b>. "
+            "Collection, goals, and settings won't stay separated.")
+        warn.setStyleSheet("font-size: 13px; color: #FFFFFF; background: transparent;")
+        warn.setTextFormat(Qt.TextFormat.RichText)
+        warn.setWordWrap(True)
+        warn_layout.addWidget(warn)
+        dl.addWidget(warn_box)
+        dl.addSpacing(6)
 
-            btns = QHBoxLayout()
-            btns.addStretch()
-            yes_btn = QPushButton("Yes, sign my saves")
-            yes_btn.setStyleSheet("""
-                QPushButton {
-                    background: #1B5E20; color: #81C784;
-                    border: 1px solid #388E3C; border-radius: 4px;
-                    padding: 8px 24px; font-size: 12px; font-weight: bold;
-                }
-                QPushButton:hover {
-                    background: #2E7D32; color: #C8E6C9;
-                    border-color: #66BB6A;
-                }
-            """)
-            yes_btn.clicked.connect(dlg.accept)
-            btns.addWidget(yes_btn)
-            no_btn = QPushButton("No thanks")
-            no_btn.clicked.connect(dlg.reject)
-            btns.addWidget(no_btn)
-            dl.addLayout(btns)
+        rec_row = QHBoxLayout()
+        rec_icon = QLabel("\u2B50")  # star
+        rec_icon.setStyleSheet("font-size: 20px; background: transparent;")
+        rec_icon.setFixedWidth(28)
+        rec_row.addWidget(rec_icon)
+        recommend = QLabel(
+            "<b>Recommended: Yes.</b> Perfectly safe, undoable anytime via"
+            "<br>"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+            "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+            "ANAMNESIS SE &gt; File Manager &gt; Unsign Selected Save")
+        recommend.setStyleSheet("font-size: 12px; color: #FFD54F;")
+        recommend.setTextFormat(Qt.TextFormat.RichText)
+        recommend.setWordWrap(True)
+        rec_row.addWidget(recommend)
+        dl.addLayout(rec_row)
+        dl.addSpacing(10)
 
-            if dlg.exec() == QDialog.DialogCode.Accepted:
-                set_stamp_consent(save_dir, True)
-                results = stamp_all_saves(save_dir)
-                show_toast(self, f"Signed {len(results)} save files", "success")
-            else:
-                set_stamp_consent(save_dir, False)
+        btns = QHBoxLayout()
+        btns.addStretch()
+        yes_btn = QPushButton("Yes, sign my saves")
+        yes_btn.setStyleSheet("""
+            QPushButton {
+                background: #1B5E20; color: #81C784;
+                border: 1px solid #388E3C; border-radius: 4px;
+                padding: 8px 24px; font-size: 12px; font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #2E7D32; color: #C8E6C9;
+                border-color: #66BB6A;
+            }
+        """)
+        yes_btn.clicked.connect(dlg.accept)
+        btns.addWidget(yes_btn)
+        no_btn = QPushButton("No thanks")
+        no_btn.clicked.connect(dlg.reject)
+        btns.addWidget(no_btn)
+        dl.addLayout(btns)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            set_stamp_consent(save_dir, True)
+            results = stamp_all_saves(save_dir)
+            show_toast(self, f"Signed {len(results)} save files", "success")
 
     # ── Toolbar ──
 
