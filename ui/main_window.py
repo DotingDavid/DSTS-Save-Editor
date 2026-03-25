@@ -92,8 +92,14 @@ class MainWindow(QMainWindow):
             dlg = QDialog(self)
             dlg.setWindowTitle("ANAMNESIS — Save File Identification")
             dlg.setFixedWidth(500)
-            # Prevent closing without choosing
-            dlg.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
+            # Modal — blocks the main window. User can close the WHOLE app
+            # via taskbar/Alt+F4 on the main window, but can't dismiss
+            # this dialog without choosing.
+            dlg.setModal(True)
+            dlg.setWindowFlags(
+                Qt.WindowType.Dialog |
+                Qt.WindowType.CustomizeWindowHint |
+                Qt.WindowType.WindowTitleHint)
             dlg.setStyleSheet(f"""
                 QDialog {{ background: #0C0C14; color: #E0E0E0; }}
                 QLabel {{ color: #E0E0E0; }}
@@ -150,9 +156,17 @@ class MainWindow(QMainWindow):
             btns = QHBoxLayout()
             btns.addStretch()
             yes_btn = QPushButton("Yes, sign my saves")
-            yes_btn.setStyleSheet(
-                "background: #1B5E20; color: #81C784; "
-                "border: 1px solid #388E3C; font-weight: bold;")
+            yes_btn.setStyleSheet("""
+                QPushButton {
+                    background: #1B5E20; color: #81C784;
+                    border: 1px solid #388E3C; border-radius: 4px;
+                    padding: 8px 24px; font-size: 12px; font-weight: bold;
+                }
+                QPushButton:hover {
+                    background: #2E7D32; color: #C8E6C9;
+                    border-color: #66BB6A;
+                }
+            """)
             yes_btn.clicked.connect(dlg.accept)
             btns.addWidget(yes_btn)
             no_btn = QPushButton("No thanks")
