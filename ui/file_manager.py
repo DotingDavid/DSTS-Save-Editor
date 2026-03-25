@@ -259,8 +259,13 @@ class FileManagerPanel(QWidget):
         sig_row.addWidget(btn)
 
         btn = _action_btn("Unsign Selected Save", danger=True)
-        btn.setToolTip("Remove the ANAMNESIS signature from this save. Your edits are kept — only the signature is removed.")
+        btn.setToolTip("Remove the ANAMNESIS signature from this save. Your edits are kept, only the signature is removed.")
         btn.clicked.connect(self._unsign_save)
+        sig_row.addWidget(btn)
+
+        btn = _action_btn("Unsign All Saves", danger=True)
+        btn.setToolTip("Remove ANAMNESIS signatures from ALL saves and reset consent. The consent dialog will appear on next launch.")
+        btn.clicked.connect(self._unsign_all)
         sig_row.addWidget(btn)
 
         layout.addLayout(sig_row)
@@ -628,6 +633,38 @@ class FileManagerPanel(QWidget):
             else:
                 QMessageBox.information(self, "Not Signed",
                     f"Slot {slot_str} doesn't have an ANAMNESIS signature.")
+            self._refresh()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+
+    def _unsign_all(self):
+        if not self._save_dir:
+            return
+        reply = QMessageBox.question(
+            self, "Unsign All Saves",
+            "Remove the ANAMNESIS signature from ALL save files?\n\n"
+            "This will:\n"
+            "  - Remove signatures from every save slot\n"
+            "  - Reset the consent preference\n"
+            "  - The consent dialog will appear on next launch\n\n"
+            "Your edits and Digimon data are NOT affected.\n"
+            "Only the signatures are removed.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            from save_data import unsign_save, list_save_slots, _consent_path
+            count = 0
+            for _, path, _ in list_save_slots(self._save_dir):
+                if unsign_save(path):
+                    count += 1
+            # Delete the consent file so dialog shows again
+            consent_path = _consent_path(self._save_dir)
+            if os.path.exists(consent_path):
+                os.remove(consent_path)
+            from ui.toast import show_toast
+            show_toast(self.window(),
+                       f"Unsigned {count} saves. Consent reset.", "success")
             self._refresh()
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
