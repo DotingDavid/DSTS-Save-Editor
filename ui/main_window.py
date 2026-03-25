@@ -84,7 +84,26 @@ class MainWindow(QMainWindow):
             # Already consented — stamp any new unstamped slots
             stamp_all_saves(save_dir)
             return
-        else:
+
+        # Check if saves are already signed (user consented via companion app)
+        import save_crypto
+        from save_data import read_save_uid, list_save_slots
+        for _, path, _ in list_save_slots(save_dir):
+            slot_str = os.path.basename(path).replace('.bin', '')
+            if slot_str == '0000':
+                continue
+            try:
+                with open(path, 'rb') as f:
+                    raw = f.read()
+                if read_save_uid(save_crypto.decrypt(raw)):
+                    # At least one save is already signed — consent implied
+                    set_stamp_consent(save_dir, True)
+                    stamp_all_saves(save_dir)
+                    return
+            except Exception:
+                continue
+
+        # Not consented and no saves signed — show consent dialog
             # First launch — custom consent dialog
             from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout
             dlg = QDialog(self)
@@ -127,29 +146,47 @@ class MainWindow(QMainWindow):
             body1.setWordWrap(True)
             dl.addWidget(body1)
 
+            safe_row = QHBoxLayout()
+            safe_icon = QLabel("\U0001F6E1")  # shield emoji
+            safe_icon.setStyleSheet("font-size: 18px; background: transparent;")
+            safe_icon.setFixedWidth(28)
+            safe_row.addWidget(safe_icon)
             safe = QLabel(
                 "A backup of every save file will be created automatically "
                 "before any changes are made. You can restore these backups "
                 "at any time from the File Manager.")
             safe.setStyleSheet("font-size: 12px; color: #81C784; font-weight: bold;")
             safe.setWordWrap(True)
-            dl.addWidget(safe)
+            safe_row.addWidget(safe)
+            dl.addLayout(safe_row)
 
+            warn_row = QHBoxLayout()
+            warn_icon = QLabel("\u26A0")  # warning triangle
+            warn_icon.setStyleSheet("font-size: 18px; color: #EF5350; background: transparent;")
+            warn_icon.setFixedWidth(28)
+            warn_row.addWidget(warn_icon)
             warn = QLabel(
                 "If you decline, some features will not work correctly "
                 "across multiple save files. Collection data, evolution "
                 "goals, and settings may bleed between saves.")
             warn.setStyleSheet("font-size: 12px; color: #EF5350; font-weight: bold;")
             warn.setWordWrap(True)
-            dl.addWidget(warn)
+            warn_row.addWidget(warn)
+            dl.addLayout(warn_row)
 
+            rec_row = QHBoxLayout()
+            rec_icon = QLabel("\u2B50")  # star
+            rec_icon.setStyleSheet("font-size: 16px; background: transparent;")
+            rec_icon.setFixedWidth(28)
+            rec_row.addWidget(rec_icon)
             recommend = QLabel(
                 "It is recommended that you select Yes. This is perfectly "
                 "safe and can be undone at any time via File Manager > "
                 "Unsign Selected Save.")
             recommend.setStyleSheet("font-size: 11px; color: #FFD54F;")
             recommend.setWordWrap(True)
-            dl.addWidget(recommend)
+            rec_row.addWidget(recommend)
+            dl.addLayout(rec_row)
 
             btns = QHBoxLayout()
             btns.addStretch()
