@@ -83,10 +83,8 @@ class MainWindow(QMainWindow):
         if consent is True:
             # Already consented — stamp any new unstamped slots
             stamp_all_saves(save_dir)
-        elif consent is False:
-            # Declined — do nothing
-            pass
-        elif consent is None:
+            return
+        else:
             # First launch — custom consent dialog
             from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout
             dlg = QDialog(self)
