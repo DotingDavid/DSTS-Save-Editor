@@ -144,9 +144,23 @@ class NavPanel(QWidget):
                     self._account_combo.setCurrentIndex(i)
                     break
         else:
-            self._account_combo.addItem("No saves found")
+            self._account_combo.addItem("No saves found — click Browse")
         self._account_combo.currentIndexChanged.connect(self._on_account_changed)
         slot_layout.addWidget(self._account_combo)
+
+        # Browse button — lets user manually pick save directory
+        if not self._all_accounts:
+            browse_btn = QPushButton("Browse for Save Directory...")
+            browse_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {ACCENT};
+                    border: 1px solid {ACCENT}; border-radius: 3px;
+                    font-size: 10px; padding: 4px 8px;
+                }}
+                QPushButton:hover {{ background: rgba(0,191,255,0.1); }}
+            """)
+            browse_btn.clicked.connect(self._on_browse_save_dir)
+            slot_layout.addWidget(browse_btn)
 
         # Save slot selector
         slot_label = QLabel("SAVE SLOT")
@@ -306,6 +320,28 @@ class NavPanel(QWidget):
             path = self._combo.itemData(idx)
             if path and os.path.isfile(path):
                 self.file_selected.emit(path)
+
+    def _on_browse_save_dir(self):
+        """Let user manually pick their save directory."""
+        path = QFileDialog.getExistingDirectory(
+            self, "Select Save Directory",
+            os.environ.get('ProgramFiles(x86)', ''),
+            QFileDialog.Option.ShowDirsOnly)
+        if path and os.path.isdir(path):
+            # Check if it contains .bin save files
+            from save_data import list_save_slots
+            slots = list_save_slots(path)
+            if slots:
+                self._save_dir = path
+                self._account_combo.clear()
+                self._account_combo.addItem(f"Manual: {os.path.basename(path)}", path)
+                self._populate_slots()
+            else:
+                from PyQt6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "No Saves Found",
+                    f"No save files (.bin) found in:\n{path}\n\n"
+                    "Make sure you select the folder containing your "
+                    "numbered save files (e.g., 0000.bin, 0001.bin).")
 
     def _on_open_file(self):
         start_dir = self._save_dir or ""
