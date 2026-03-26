@@ -68,15 +68,35 @@ Built by reverse-engineering the game's encrypted save file format from scratch.
 
 ---
 
-## Important Information
+## Disclaimer
 
-**Automatic Backups.** The editor creates a backup before every save, stored in a `backups` folder next to your saves. You can also restore pre-signature backups from the File Manager.
+**Use at your own risk.** This tool modifies your save files. While extensive testing has been done, it is possible to corrupt a save file. The author is not responsible for any lost progress or damaged save data.
 
-**This is the first save editor for this game.** The save format was reverse-engineered through binary analysis and save-diffing. While every editable field has been verified through testing, stay within reasonable values. The game displays stats up to 9999, and the editor enforces this cap.
+**Always have backups.** The editor creates automatic backups, but you should also keep your own manual copies of important saves before making significant changes.
+
+**This is the first save editor for this game.** The save file format was reverse-engineered through binary analysis and save-diffing. There is no official documentation. While every editable field has been verified through testing, there may be edge cases or value combinations that cause the game to crash or behave unexpectedly. If something goes wrong, restore from a backup and try more moderate values.
+
+---
+
+## Backup System
+
+The editor has a multi-layered backup system to protect your save files:
+
+**Automatic Backups.** A backup is created before every save, stored in a `backups` folder next to your saves. The editor keeps the 2 most recent backups per slot to avoid filling your disk.
+
+**Pre-Signature Backups.** Before the save identification system writes anything for the first time, a separate one-time backup of each save is created in a `pre_signature_backups` folder. These are untouched copies of your saves from before ANAMNESIS was ever used.
+
+**File Manager.** The built-in File Manager lets you backup, restore, copy, swap, export, and import save slots. You can restore pre-signature backups, unsign individual saves, or unsign all saves and fully revert to a pre-ANAMNESIS state at any time.
+
+---
+
+## Important Notes
 
 **Close the game before editing.** The game's autosave will overwrite your edits if it's running. The editor warns you if it detects the game process.
 
-**Level changes are smart.** When you change a Digimon's level, the editor automatically sets the correct EXP for that species' experience curve and adjusts growth stats to match. No more negative EXP displays.
+**Stay within reasonable values.** The game displays stats up to 9999, and the editor enforces this cap. Setting extreme values on low-level Digimon may cause unexpected behavior in-game.
+
+**Level changes are smart.** When you change a Digimon's level, the editor automatically sets the correct EXP for that species' experience curve and adjusts growth stats to match.
 
 **What we don't touch.** The editor only modifies verified fields. It does not change quest progress, dialogue history, encounter data, or any unverified byte ranges.
 
