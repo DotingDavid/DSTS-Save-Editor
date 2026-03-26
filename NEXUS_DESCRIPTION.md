@@ -49,11 +49,7 @@ Built by reverse-engineering the game's encrypted save file format from scratch.
 - Automatic backup before every save (keeps 2 most recent per slot)
 - Game-running detection with warning
 
-**Save Identification System**
-- Works with ANAMNESIS Companion for per-save collection tracking
-- Consent dialog on first launch with automatic pre-signature backups
-- Unsign individual saves or all saves from File Manager
-- Full revert to pre-ANAMNESIS state available at any time
+
 
 ---
 
@@ -84,9 +80,7 @@ The editor has a multi-layered backup system to protect your save files:
 
 **Automatic Backups.** A backup is created before every save, stored in a `backups` folder next to your saves. The editor keeps the 2 most recent backups per slot to avoid filling your disk.
 
-**Pre-Signature Backups.** Before the save identification system writes anything for the first time, a separate one-time backup of each save is created in a `pre_signature_backups` folder. These are untouched copies of your saves from before ANAMNESIS was ever used.
-
-**File Manager.** The built-in File Manager lets you backup, restore, copy, swap, export, and import save slots. You can restore pre-signature backups, unsign individual saves, or unsign all saves and fully revert to a pre-ANAMNESIS state at any time.
+**File Manager.** The built-in File Manager lets you backup, restore, copy, swap, export, and import save slots at any time.
 
 ---
 
