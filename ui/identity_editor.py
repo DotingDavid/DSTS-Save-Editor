@@ -3,11 +3,12 @@
 Clean layout with grouped sections and visual hierarchy.
 """
 
+import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
                               QLabel, QSpinBox, QComboBox, QSlider, QFrame,
                               QLineEdit, QPushButton, QGridLayout)
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtGui import QFont, QIcon
 
 from ui.style import (ACCENT, ACCENT_DIM, TEXT_PRIMARY, TEXT_SECONDARY,
                        TEXT_VALUE, STAGE_COLORS, PERS_COLORS, PERS_CATEGORY,
@@ -155,16 +156,24 @@ class IdentityEditor(QWidget):
         food_row.addWidget(food_label)
         self._food_combo = QComboBox()
         self._food_combo.setFixedHeight(22)
+        self._food_combo.setIconSize(QSize(18, 18))
+        from app_paths import get_data_dir
+        from PyQt6.QtGui import QIcon
+        food_dir = os.path.join(get_data_dir(), 'food_icons')
         FOOD_ITEMS = [
-            (0, "\U0001F356 Meat"),
-            (1, "\U0001F41F Fish"),
-            (2, "\U0001F34E Apple"),
-            (3, "\U0001F955 Carrot"),
-            (4, "\U0001F34C Banana"),
-            (5, "\U0001F4AA Protein"),
+            (0, "Meat", "food_0_meat.png"),
+            (1, "Fish", "food_1_fish.png"),
+            (2, "Apple", "food_2_apple.png"),
+            (3, "Carrot", "food_3_carrot.png"),
+            (4, "Banana", "food_4_banana.png"),
+            (5, "Protein", "food_5_protein.png"),
         ]
-        for fid, fname in FOOD_ITEMS:
-            self._food_combo.addItem(fname, fid)
+        for fid, fname, ficon in FOOD_ITEMS:
+            icon_path = os.path.join(food_dir, ficon)
+            if os.path.exists(icon_path):
+                self._food_combo.addItem(QIcon(icon_path), fname, fid)
+            else:
+                self._food_combo.addItem(fname, fid)
         self._food_combo.currentIndexChanged.connect(self._on_food_changed)
         food_row.addWidget(self._food_combo)
         food_row.addStretch()
