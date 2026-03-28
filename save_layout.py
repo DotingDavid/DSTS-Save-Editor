@@ -603,36 +603,61 @@ UNKNOWNS = {
 # FARM DIGIMON STRUCT (stride 0x158 — 8 bytes longer than party/box)
 # ══════════════════════════════════════════════════════════════════════
 # Farm entries at 0x053000-0x055000 use stride 0x158.
-# The core Digimon fields (+0x000 to +0x14C) are identical to party/box,
-# but the creation hash is at +0x150 (party/box uses +0x148) because
-# +0x148 stores the farm slot index in farm entries.
+# Core fields (+0x000 to +0x147) are identical to party/box.
+# The extra 8 bytes are a farm_slot_index inserted at +0x148,
+# which pushes creation_hash and next_db_id forward by 8.
+#
+# TAIL COMPARISON (offsets relative to name_off):
+#   Offset   Party/Box (0x150)       Farm (0x158)
+#   +0x140   active_flag             active_flag
+#   +0x144   roster_index            (unused, always 0)
+#   +0x148   creation_hash           farm_slot_index (1-based island position)
+#   +0x14C   next_db_id (linked list)(padding, always 0)
+#   +0x150   (next entry starts)     creation_hash (shifted +8)
+#   +0x154                           next_db_id (shifted +8, linked list)
+#
+# Verified: 28/28 linked list match across 2 saves.
 
 FARM_STRIDE = 0x158
+
+# Farm-specific field offsets (relative to name_off)
+FARM_SLOT_INDEX  = 0x148   # Int32 — 1-based farm island position
+FARM_SLOT_PAD    = 0x14C   # Int32 — always 0
+FARM_HASH        = 0x150   # Int32 — creation_hash (same as party/box +0x148)
+FARM_NEXT_DB_ID  = 0x154   # Int32 — linked list next species (same as party/box +0x14C)
 
 FARM_FIELDS = {
     # Farm Digimon share the same core struct layout as party/box.
     # Located at 0x053000-0x055000, stride 0x158.
     #
-    # Training data lives at FIXED offsets within the standard struct:
-    #   +0x0D0: Training timer (Float64, ~9.29-9.31 = game time scale)
-    #   +0x0D8: Training status (Int32: high byte 0x01=active, 0x00=done, low 24 bits=session counter)
+    # ── Tail fields (the 8-byte difference) ──
+    # +0x148: farm_slot_index — 1-based sequential position on farm island (1..N)
+    # +0x14C: padding (always 0)
+    # +0x150: creation_hash — same as party/box +0x148
+    # +0x154: next_db_id — linked list pointer, same as party/box +0x14C
     #
-    # These are the same bytes we initially labeled "padding/enhance" — they serve
-    # DUAL PURPOSE: training timer for farm Digimon, enhancement data for party Digimon.
+    # ── Training data (within core struct, farm-only usage) ──
+    # +0x0D0: Float64 — play_time snapshot when training started (0 if never trained)
+    # +0x0D8: Int32 — training status
+    #         High byte: 0x01=active, 0x00=idle/completed
+    #         Low 24 bits: session count for CURRENT training set (resets on set change)
+    #         Examples: 0x01000016 = session 22 in-progress, 0x00000017 = 23 complete
+    # +0x0DC: Int32 — always 0 (confirmed empty)
+    # +0x0E0: Int32 — farm_batch_tick (global timestamp, same for all Digimon in a save)
+    # +0x0E4: Int32 — always 14 (farm constant, possibly island/config ID)
+    # +0x0E8: Int32 — training_set_id (29000+id from farm_training table, 0xFFFFFFFF=none)
     #
-    # Training bonus goes to the appropriate farm_stat field (+0x090-0x0A8):
-    #   +300 per normal training session, +1000 for intensive
-    #   Which stat gets the bonus depends on the training type selected
+    # Training bonus: +300 raw per normal session, +1000 intensive
+    # Goes to the appropriate farm_stat field (+0x090-0x0A8) based on training type
     #
-    # Status decoding:
-    #   0x01000016 = session 22 in-progress (high byte = 0x01)
-    #   0x00000017 = session 23 completed (counter incremented, high byte cleared)
-    #   0x01000008 = session 8 in-progress
-    #
-    # Empty farm slots: sentinels at +0x038-0x040, +0x054=5000
+    # Empty farm slots: sentinels (0xFFFFFFFF) at various offsets, 5000 marker
     'uses_same_struct': True,
-    'training_timer_offset': 0x0D0,  # Float64, same as enhance HP/SP in party entries
-    'training_status_offset': 0x0D8, # Int32, same as enhance ATK in party entries
+    'training_timer_offset': 0x0D0,
+    'training_status_offset': 0x0D8,
+    'training_set_offset': 0x0E8,
+    'farm_slot_offset': 0x148,
+    'farm_hash_offset': 0x150,
+    'farm_next_db_id_offset': 0x154,
 }
 
 # ══════════════════════════════════════════════════════════════════════

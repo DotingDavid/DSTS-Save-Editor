@@ -811,6 +811,10 @@ class SaveFile:
             "talent_acc": struct.unpack('<I', d[offset + 0xFC:offset + 0x100])[0],
             "location": region if region == "farm" else "box",
             "evo_history": evo_history,
+            "farm_slot": struct.unpack('<I', d[offset + 0x148:offset + 0x14C])[0] if region == "farm" else None,
+            "training_timer": struct.unpack('<d', d[offset + 0xD0:offset + 0xD8])[0] if region == "farm" else 0.0,
+            "training_status": struct.unpack('<I', d[offset + 0xD8:offset + 0xDC])[0] if region == "farm" else 0,
+            "training_set_id": struct.unpack('<I', d[offset + 0xE8:offset + 0xEC])[0] if region == "farm" else 0,
         }
 
     # ── Field writers ──
