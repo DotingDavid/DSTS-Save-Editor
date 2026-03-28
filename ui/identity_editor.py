@@ -158,7 +158,6 @@ class IdentityEditor(QWidget):
         self._food_combo.setFixedHeight(22)
         self._food_combo.setIconSize(QSize(18, 18))
         from app_paths import get_data_dir
-        from PyQt6.QtGui import QIcon
         food_dir = os.path.join(get_data_dir(), 'food_icons')
         FOOD_ITEMS = [
             (0, "Meat", "food_0_meat.png"),
