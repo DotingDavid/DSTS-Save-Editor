@@ -144,6 +144,30 @@ class IdentityEditor(QWidget):
             self._pskill_combo.addItem(f"{row['name']}  —  {desc}", row["id"])
         self._pskill_combo.currentIndexChanged.connect(self._on_pskill_changed)
         pers_row.addWidget(self._pskill_combo, 1)
+        info.addLayout(pers_row)
+
+        # Food preference dropdown
+        food_row = QHBoxLayout()
+        food_row.setSpacing(6)
+        food_label = QLabel("Food:")
+        food_label.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; font-size: 11px; border: none; background: transparent;")
+        food_row.addWidget(food_label)
+        self._food_combo = QComboBox()
+        self._food_combo.setFixedHeight(22)
+        FOOD_ITEMS = [
+            (0, "\U0001F356 Meat"),
+            (1, "\U0001F41F Fish"),
+            (2, "\U0001F34E Apple"),
+            (3, "\U0001F955 Carrot"),
+            (4, "\U0001F34C Banana"),
+            (5, "\U0001F4AA Protein"),
+        ]
+        for fid, fname in FOOD_ITEMS:
+            self._food_combo.addItem(fname, fid)
+        self._food_combo.currentIndexChanged.connect(self._on_food_changed)
+        food_row.addWidget(self._food_combo)
+        food_row.addStretch()
 
         self._change_btn = QPushButton("Change Species...")
         self._change_btn.setFixedWidth(120)
@@ -157,8 +181,8 @@ class IdentityEditor(QWidget):
             QPushButton:hover {{ color: {ACCENT}; border-color: {ACCENT}; }}
         """)
         self._change_btn.clicked.connect(self._on_change_species)
-        pers_row.addWidget(self._change_btn)
-        info.addLayout(pers_row)
+        food_row.addWidget(self._change_btn)
+        info.addLayout(food_row)
 
         header.addLayout(info)
         header.addStretch()
@@ -374,6 +398,10 @@ class IdentityEditor(QWidget):
         self._bond_slider.setValue(entry["bond"])
         self._bond_label.setText(f"{entry['bond']}%")
 
+        food_idx = self._food_combo.findData(entry.get("food_pref", 0))
+        if food_idx >= 0:
+            self._food_combo.setCurrentIndex(food_idx)
+
         cur_hp = entry.get("cur_hp", 0)
         self._hp_spin.setValue(cur_hp)
         self._hp_spin.hide()
@@ -428,6 +456,10 @@ class IdentityEditor(QWidget):
     def _on_pers_changed(self, idx):
         if not self._updating and idx >= 0:
             self.field_changed.emit("personality", self._pers_combo.itemData(idx))
+
+    def _on_food_changed(self, idx):
+        if not self._updating and idx >= 0:
+            self.field_changed.emit("food_pref", self._food_combo.itemData(idx))
 
     def _on_pskill_changed(self, idx):
         if not self._updating and idx >= 0:

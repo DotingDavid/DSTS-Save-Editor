@@ -299,7 +299,7 @@ DIGI = {
     'cb_pad':           (0x0CB, 'B',  'Zero padding',                                        'HIGH',   'CONFIRMED_EMPTY'),
     'cc_const':         (0x0CC, 'B',  'Always 2 (constant across all entries)',               'HIGH',   'NOTED'),
     'cd_pad':           (0x0CD, 'B',  'Zero',                                                'HIGH',   'CONFIRMED_EMPTY'),
-    'ce_party_slot':    (0x0CE, 'B',  'CONFIRMED STATIC: Party slot assignment at creation (0-5). Never changes across 9 saves. Set once when Digimon first placed in party', 'HIGH', 'NEW'),
+    'food_preference':  (0x0CE, 'B',  'CONFIRMED: Favorite food (0=Meat, 1=Fish, 2=Apple, 3=Carrot, 4=Banana, 5=Protein). Previously mislabeled as party_slot. Directly indexes food type.', 'HIGH', 'NEW'),
     'cf_pad':           (0x0CF, 'B',  'Zero',                                                'HIGH',   'CONFIRMED_EMPTY'),
 
     # ── Training Timer (Farm only) / Zero Padding (Party/Box) ──

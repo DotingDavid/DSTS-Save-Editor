@@ -801,6 +801,7 @@ class SaveFile:
             "total_transforms": struct.unpack('<I', d[offset + 0x138:offset + 0x13C])[0],
             "creation_hash": creation_hash,
             "pers_skill_id": struct.unpack('<I', d[offset + 0xF8:offset + 0xFC])[0],
+            "food_pref": d[offset + 0xCE],
             "exp": struct.unpack('<I', d[offset + 0x64:offset + 0x68])[0],
             "cur_hp": struct.unpack('<i', d[offset + 0x6C:offset + 0x70])[0],
             "cur_sp": struct.unpack('<i', d[offset + 0x70:offset + 0x74])[0],
@@ -865,6 +866,12 @@ class SaveFile:
     def write_pers_skill(self, entry_offset, skill_id):
         """Write personality skill ID at +0xF8."""
         self.write_u32(entry_offset + 0xF8, skill_id)
+
+    def write_food_pref(self, entry_offset, value):
+        """Write food preference at +0xCE (0-5)."""
+        if not (0 <= value <= 5):
+            raise ValueError(f"Food preference must be 0-5, got {value}")
+        self.write_u8(entry_offset + 0xCE, value)
 
     def write_white_stat(self, entry_offset, stat_index, value):
         """Write a white (growth) stat. stat_index: 0=HP, 1=SP, 2=ATK, etc."""
