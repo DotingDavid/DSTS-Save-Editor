@@ -28,6 +28,17 @@ def _load_skill_list():
     for row in db.execute("SELECT id, name FROM skills ORDER BY name"):
         if row["name"]:
             _skill_list.append((row["id"], row["name"]))
+    # Append modded skill names
+    from save_data import _mod_overlay
+    if _mod_overlay and _mod_overlay.is_active and _mod_overlay.skill_names:
+        existing_ids = {s[0] for s in _skill_list}
+        for sid_str, name in _mod_overlay.skill_names.items():
+            try:
+                sid = int(sid_str)
+                if sid not in existing_ids and name:
+                    _skill_list.append((sid, name))
+            except (ValueError, TypeError):
+                pass
     return _skill_list
 
 

@@ -42,6 +42,19 @@ def get_icon(name_or_id, size=64):
         QPixmap (may be null if icon not found)
     """
     if isinstance(name_or_id, int):
+        # Check mod overlay for modded icons first
+        from save_data import _mod_overlay
+        if _mod_overlay and _mod_overlay.is_active and name_or_id in _mod_overlay.icon_paths:
+            cache_key = f"mod_{name_or_id}_{size}"
+            pm = QPixmapCache.find(cache_key)
+            if pm and not pm.isNull():
+                return pm
+            pm = QPixmap(_mod_overlay.icon_paths[name_or_id])
+            if not pm.isNull():
+                pm = pm.scaled(QSize(size, size),
+                               transformMode=Qt.TransformationMode.SmoothTransformation)
+                QPixmapCache.insert(cache_key, pm)
+                return pm
         from save_data import get_digimon_name
         name = get_digimon_name(name_or_id)
     else:

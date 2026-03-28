@@ -62,6 +62,24 @@ class MainWindow(QMainWindow):
         self._build_panels()
         self._build_statusbar()
 
+        # Detect mods BEFORE any save can be loaded
+        self._mod_overlay = None
+        try:
+            from mod_loader import detect_mods
+            from save_data import set_mod_overlay
+            self._mod_overlay = detect_mods()
+            if self._mod_overlay and self._mod_overlay.is_active:
+                set_mod_overlay(self._mod_overlay)
+                logger.info("Mods: %d active (%s)", self._mod_overlay.mod_count,
+                            ", ".join(self._mod_overlay.mod_names))
+                # Add mod indicator to status bar
+                mod_label = QLabel(f"{self._mod_overlay.mod_count} mod(s)")
+                mod_label.setStyleSheet("color: #81C784; font-size: 10px; font-weight: bold;")
+                mod_label.setToolTip(", ".join(self._mod_overlay.mod_names))
+                self.statusBar().addPermanentWidget(mod_label)
+        except Exception as e:
+            logger.warning("Mod detection failed: %s", e)
+
         # Game process detection — single reusable thread
         self._game_running = False
         self._checker = ProcessChecker()

@@ -30,6 +30,17 @@ from app_paths import get_db_path
 
 VERSION = "1.0.0"
 
+# ── Mod overlay ──────────────────────────────────────────────────────
+_mod_overlay = None
+
+
+def set_mod_overlay(overlay):
+    """Set the global mod overlay. Called once on startup after detection."""
+    global _mod_overlay, _species_cache
+    _mod_overlay = overlay
+    _species_cache = None  # force rebuild with modded species
+
+
 # ── Save UID system ──────────────────────────────────────────────────
 # Shared namespace for deterministic UUID generation. MUST be identical
 # in both ANAMNESIS SE and ANAMNESIS Companion.
@@ -256,6 +267,9 @@ def close_db():
 
 def get_digimon_name(db_id):
     """Look up Digimon species name by database ID."""
+    # Check mod overlay first
+    if _mod_overlay and _mod_overlay.is_active and db_id in _mod_overlay.new_digimon:
+        return _mod_overlay.new_digimon[db_id].get("name", f"Modded #{db_id}")
     row = _get_db().execute(
         "SELECT name FROM digimon WHERE id = ?", (db_id,)
     ).fetchone()
@@ -267,6 +281,12 @@ def get_digimon_name(db_id):
 
 def get_digimon_info(db_id):
     """Look up Digimon name, stage, attribute, type by database ID."""
+    if _mod_overlay and _mod_overlay.is_active and db_id in _mod_overlay.new_digimon:
+        info = _mod_overlay.new_digimon[db_id]
+        return {"name": info.get("name", f"Modded #{db_id}"),
+                "stage": info.get("stage", ""),
+                "attribute": info.get("attribute", ""),
+                "type": info.get("type", "")}
     row = _get_db().execute(
         "SELECT name, stage, attribute, type FROM digimon WHERE id = ?", (db_id,)
     ).fetchone()
@@ -328,6 +348,8 @@ def get_growth_stats(growth_type, level):
 
 def get_base_stats(db_id):
     """Look up base stats (level 1) for a Digimon."""
+    if _mod_overlay and _mod_overlay.is_active and db_id in _mod_overlay.new_stats:
+        return list(_mod_overlay.new_stats[db_id])
     row = _get_db().execute(
         "SELECT hp, sp, atk, def_, int_, spi, spd FROM stats_base WHERE digimon_id = ?",
         (db_id,)
@@ -352,6 +374,16 @@ def get_all_digimon_species():
         _species_cache.append(
             (row["id"], row["name"], row["stage"] or "",
              row["attribute"] or "", row["type"] or ""))
+    # Append modded species
+    if _mod_overlay and _mod_overlay.is_active:
+        existing_ids = {s[0] for s in _species_cache}
+        for db_id, info in _mod_overlay.new_digimon.items():
+            if db_id not in existing_ids:
+                _species_cache.append(
+                    (db_id, info.get("name", f"Modded #{db_id}"),
+                     info.get("stage", ""), info.get("attribute", ""),
+                     info.get("type", "")))
+        _species_cache.sort(key=lambda s: s[1].lower())
     return _species_cache
 
 
@@ -591,6 +623,19 @@ class SaveFile:
                                                      row["def_"], row["int_"],
                                                      row["spi"], row["spd"]]
 
+        # Inject modded species so they appear in the roster
+        if _mod_overlay and _mod_overlay.is_active:
+            for db_id, info in _mod_overlay.new_digimon.items():
+                if db_id not in id_to_info:
+                    id_to_info[db_id] = {
+                        "id": db_id, "name": info.get("name", f"Modded #{db_id}"),
+                        "stage": info.get("stage", ""),
+                        "attribute": info.get("attribute", ""),
+                        "type": info.get("type", "")}
+            for db_id, stats in _mod_overlay.new_stats.items():
+                if db_id not in base_stats_cache:
+                    base_stats_cache[db_id] = stats
+
         party_entries = []
         box_entries = []
 
@@ -662,7 +707,18 @@ class SaveFile:
         db_id = struct.unpack('<I', d[offset - 4:offset])[0]
         info = id_to_info.get(db_id)
         if not info:
-            return None
+            # Fallback for unrecognized species (modded save without mods)
+            name_end = d.find(b'\x00', offset, offset + 32)
+            if name_end > offset:
+                try:
+                    fallback_name = d[offset:name_end].decode('ascii')
+                    if len(fallback_name) >= 2:
+                        info = {"id": db_id, "name": fallback_name,
+                                "stage": "", "attribute": "", "type": ""}
+                except (UnicodeDecodeError, ValueError):
+                    pass
+            if not info:
+                return None
 
         name_end = d.find(b'\x00', offset, offset + 32)
         if name_end <= offset:
@@ -1073,6 +1129,8 @@ class SaveFile:
         valid_ids = set()
         for row in db.execute("SELECT id FROM digimon"):
             valid_ids.add(row["id"])
+        if _mod_overlay and _mod_overlay.is_active:
+            valid_ids.update(_mod_overlay.new_digimon.keys())
         scan_count = 0
         scan_100 = 0
         for i in range(SCAN_TABLE_REAL_START, 583):
