@@ -52,7 +52,7 @@ REGIONS = {
     'event_padding':    (0x060000, 0x061140, 'Empty slots'),
     'party_history':    (0x061140, 0x061800, 'Party formation history — 44 quad snapshots of Digimon IDs'),
     'quest_completion':  (0x061800, 0x06E300, 'Quest completion log — stride 0x40, sentinel=0xFFFFFFFF. 26 filled slots. First Int32 = event ID (20xxx), second = Float32 ROTATION ANGLE (radians: pi/6, pi/2, etc = compass facing when event occurred). +0x14=flag, +0x3C=area/chapter ID'),
-    'acquisition_log':  (0x06E300, 0x070000, 'Item/reward acquisition log — 116 entries with card drops'),
+    'inventory':        (0x06E300, 0x070A00, 'Item inventory — 1500 slots × 24 bytes (index, item_id, qty, flags, flags2, timestamp)'),
     'crafting_history':  (0x070000, 0x078000, 'Crafting/item history — 12 GIM-delimited record groups'),
     'discovery_table':  (0x078000, 0x079900, 'Entity discovery table — 200 (flag, id) pairs'),
 
@@ -519,14 +519,46 @@ PARTY_HISTORY_MAX = 44           # snapshots in current save
 
 
 # ══════════════════════════════════════════════════════════════════════
-# ITEM ACQUISITION LOG (at 0x06E300)
+# INVENTORY (at 0x06E300)
 # ══════════════════════════════════════════════════════════════════════
+# Player inventory — all items, equipment, cards, materials, skills-as-items.
+# Confirmed via companion app save reader + live memory cross-reference.
+# Contiguous slots, no gaps — new items appended at end.
 
-ACQUISITION_LOG_OFFSET = 0x06E300
-ACQUISITION_LOG_SLOTS = 128      # total capacity
-ACQUISITION_LOG_FILLED = 116     # in current save
-# Each entry: sequential item index paired with card/reward ID and quantity
-# Tracks every item obtained — what, when, and what card drop accompanied it
+INVENTORY_OFFSET = 0x06E300
+INVENTORY_STRIDE = 24            # bytes per slot
+INVENTORY_SLOTS  = 1500          # total capacity (empty slots pre-allocated with index)
+
+# Per-slot layout (24 bytes):
+#   +0x00  Int32   slot_index    Sequential index (0, 1, 2, ... — pre-written even for empty slots)
+#   +0x04  Int32   item_id       Item ID (matches item_names.item_id in DB). 0 = empty slot.
+#   +0x08  Int32   quantity      Item count. 0 = empty/consumed.
+#   +0x0C  Int32   flags         Equipped count for attachments/equipment, 0 otherwise
+#   +0x10  Int32   flags2        1 for Digimon cards, 0 otherwise (card/new marker)
+#   +0x14  Int32   timestamp     Varies — acquisition timestamp or related event marker
+
+INVENTORY_RECORD = {
+    'slot_index':    (0x00, 'I', 'Sequential slot number'),
+    'item_id':       (0x04, 'I', 'Item ID (0 = empty slot)'),
+    'quantity':      (0x08, 'I', 'Item quantity'),
+    'equipped':      (0x0C, 'I', 'Equipped count (attachments/equip) or 0'),
+    'card_flag':     (0x10, 'I', 'Card marker (1) or 0'),
+    'valid_marker':  (0x14, 'I', 'Byte 0: active flag (1=valid item, 0=training set/empty). '
+                                  'Bytes 1-3: acquisition batch ID (0 is fine). '
+                                  'Game skips slots where byte 0 is 0.'),
+}
+
+# Item ID ranges (from anamnesis.db):
+#   1-49:       Recovery (HP/SP capsules, sprays, revival items)
+#   50-99:      Stat boosts (augment chips, training items)
+#   100-199:    Food/Status (disinfectant, sedative, farm food)
+#   200-399:    Crafting materials (datasets, textures, fragments)
+#   700-899:    Equipment + Clothing (data fragments, outfits)
+#   1000-1199:  Attachment skills (HP/ATK/DEF/INT/SPI/SPD discs)
+#   10000-19999: Digimon cards (collectibles)
+#   20000-29999: Heroic statues, quest items
+#   30000-39999: Skills-as-items (learnable skill discs)
+#   40000+:     Special items (exit ampules, talent boosters)
 
 
 # ══════════════════════════════════════════════════════════════════════

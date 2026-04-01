@@ -229,6 +229,7 @@ class NavPanel(QWidget):
             ("digimon", "Digimon Editor"),
             ("scan", "Scan Table"),
             ("agent", "Agent / Player"),
+            ("items", "Inventory"),
             ("files", "File Manager"),
         ]
         for key, label in nav_items:

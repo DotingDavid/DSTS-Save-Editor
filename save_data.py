@@ -403,13 +403,20 @@ def is_game_running():
 
 
 def get_item_name(item_id):
-    """Look up item name by ID."""
-    row = _get_db().execute(
+    """Look up item name by ID. Falls back to skill_names for skill disc IDs."""
+    db = _get_db()
+    row = db.execute(
         "SELECT name FROM item_names WHERE item_id = ?", (str(item_id),)
     ).fetchone()
     if row and row["name"]:
         return row["name"]
-    logger.warning("Unknown item ID: %s", item_id)
+    # Skill disc IDs (30000+) map to skill_names
+    if item_id >= 30000:
+        row = db.execute(
+            "SELECT name FROM skill_names WHERE skill_id = ?", (item_id,)
+        ).fetchone()
+        if row and row["name"]:
+            return row["name"]
     return f"Item #{item_id}"
 
 
@@ -1152,12 +1159,147 @@ class SaveFile:
                     scan_100 += 1
         return scan_count, scan_100
 
+    # ── Inventory access ──
+
+    def read_inventory(self):
+        """Read all inventory slots. Returns list of dicts for occupied slots.
+
+        Each dict: {slot_index, item_id, quantity, flags, flags2, timestamp, name}
+        """
+        from save_layout import INVENTORY_OFFSET, INVENTORY_STRIDE, INVENTORY_SLOTS
+        d = self._data
+        items = []
+        for i in range(INVENTORY_SLOTS):
+            off = INVENTORY_OFFSET + i * INVENTORY_STRIDE
+            if off + INVENTORY_STRIDE > len(d):
+                break
+            item_id = struct.unpack_from('<I', d, off + 4)[0]
+            if item_id == 0:
+                continue
+            items.append({
+                'slot_index': struct.unpack_from('<I', d, off)[0],
+                'item_id': item_id,
+                'quantity': struct.unpack_from('<I', d, off + 8)[0],
+                'flags': struct.unpack_from('<I', d, off + 12)[0],
+                'flags2': struct.unpack_from('<I', d, off + 16)[0],
+                'timestamp': struct.unpack_from('<I', d, off + 20)[0],
+                '_inv_offset': off,
+                'name': get_item_name(item_id),
+            })
+        return items
+
+    def write_item_quantity(self, inv_offset, quantity):
+        """Write quantity for an existing inventory slot."""
+        if quantity < 0 or quantity > 999:
+            raise ValueError(f"Quantity must be 0-999, got {quantity}")
+        struct.pack_into('<I', self._data, inv_offset + 8, quantity)
+        if quantity >= 1 and self._data[inv_offset + 20] == 0:
+            self._data[inv_offset + 20] = 1
+        # Heal ALL invalid markers so the game reads the full inventory
+        self._heal_valid_markers()
+        self._mark_dirty()
+
+    def _heal_valid_markers(self):
+        """Ensure every inventory slot with an item has valid_marker byte0=1.
+
+        The game reads inventory sequentially and stops at the first slot
+        where byte0=0. Any item with byte0=0 would act as a premature
+        stop point, hiding everything after it. This fixes all of them.
+        """
+        from save_layout import INVENTORY_OFFSET, INVENTORY_STRIDE, INVENTORY_SLOTS
+        d = self._data
+        fixed = 0
+        for i in range(INVENTORY_SLOTS):
+            off = INVENTORY_OFFSET + i * INVENTORY_STRIDE
+            if off + INVENTORY_STRIDE > len(d):
+                break
+            item_id = struct.unpack_from('<I', d, off + 4)[0]
+            if item_id > 0 and d[off + 20] == 0:
+                d[off + 20] = 1
+                fixed += 1
+        if fixed > 0:
+            self._mark_dirty()
+            logger.info("Healed %d inventory valid markers", fixed)
+
+    def add_item(self, item_id, quantity=1):
+        """Add a new item to the first empty inventory slot.
+
+        If the item already exists, adds to its quantity instead.
+        Also heals any invalid markers on prior slots so the game
+        reads the full inventory.
+        Returns the inventory offset of the slot, or None if inventory full.
+        """
+        from save_layout import INVENTORY_OFFSET, INVENTORY_STRIDE, INVENTORY_SLOTS
+        d = self._data
+
+        # First check if item already in inventory
+        for i in range(INVENTORY_SLOTS):
+            off = INVENTORY_OFFSET + i * INVENTORY_STRIDE
+            if off + INVENTORY_STRIDE > len(d):
+                break
+            existing_id = struct.unpack_from('<I', d, off + 4)[0]
+            if existing_id == item_id:
+                # Item exists — add to quantity
+                old_qty = struct.unpack_from('<I', d, off + 8)[0]
+                new_qty = min(old_qty + quantity, 999)
+                struct.pack_into('<I', self._data, off + 8, new_qty)
+                if d[off + 20] == 0:
+                    d[off + 20] = 1
+                self._heal_valid_markers()
+                self._mark_dirty()
+                return off
+            if existing_id == 0:
+                # Empty slot — write new item here
+                struct.pack_into('<I', self._data, off + 4, item_id)
+                struct.pack_into('<I', self._data, off + 8, min(quantity, 999))
+                struct.pack_into('<I', self._data, off + 12, 0)  # equipped
+                struct.pack_into('<I', self._data, off + 16, 0)  # card_flag
+                struct.pack_into('<I', self._data, off + 20, 1)  # valid_marker
+                self._heal_valid_markers()
+                self._mark_dirty()
+                return off
+
+    def remove_item(self, inv_offset):
+        """Remove an item from inventory by zeroing its slot."""
+        struct.pack_into('<I', self._data, inv_offset + 4, 0)   # item_id
+        struct.pack_into('<I', self._data, inv_offset + 8, 0)   # quantity
+        struct.pack_into('<I', self._data, inv_offset + 12, 0)  # equipped
+        struct.pack_into('<I', self._data, inv_offset + 16, 0)  # card_flag
+        # Leave valid_marker as-is (byte0=1) so it doesn't become a
+        # premature sentinel that would hide items after it
+        self._mark_dirty()
+
     # ── Agent data access ──
 
     def read_agent_u32(self, relative_offset):
         """Read a uint32 at AGENT_BASE_OFFSET + relative_offset."""
         off = AGENT_BASE_OFFSET + relative_offset
         return struct.unpack('<I', self._data[off:off + 4])[0]
+
+    def write_player_name(self, name):
+        """Write player name to agent struct (+0x10) and header CSV."""
+        name_bytes = name.encode('ascii', errors='replace')[:30]
+        # Write to agent struct at absolute 0x0FDE90 (agent_base + 0x10)
+        off = AGENT_BASE_OFFSET + 0x10
+        for i in range(32):
+            self._data[off + i] = 0
+        for i, b in enumerate(name_bytes):
+            self._data[off + i] = b
+        # Update header CSV (plaintext, field index 4)
+        header_end = self._data.find(b'\x00')
+        if header_end > 0:
+            header = self._data[:header_end].decode('ascii', errors='replace')
+            fields = header.split(',')
+            if len(fields) > 4:
+                fields[4] = f' {name} '
+                new_header = ','.join(fields).encode('ascii', errors='replace')
+                # Pad or truncate to same length
+                if len(new_header) <= header_end:
+                    for i in range(header_end):
+                        self._data[i] = 0
+                    for i, b in enumerate(new_header):
+                        self._data[i] = b
+        self._mark_dirty()
 
     def write_agent_u32(self, relative_offset, value):
         """Write a uint32 at AGENT_BASE_OFFSET + relative_offset."""

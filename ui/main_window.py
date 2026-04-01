@@ -26,6 +26,7 @@ from ui.scan_editor import ScanEditor
 from ui.agent_editor import AgentEditor
 from ui.batch_ops import BatchOpsDialog
 from ui.file_manager import FileManagerPanel
+from ui.inventory_editor import InventoryEditor
 from ui.toast import show_toast
 from ui.pixel_bg import PixelDissolveBG
 
@@ -422,9 +423,13 @@ class MainWindow(QMainWindow):
         self._agent_editor.data_changed.connect(self._update_dirty_indicator)
         self._stack.addWidget(self._agent_editor)  # 3: agent
 
+        self._inventory_editor = InventoryEditor()
+        self._inventory_editor.data_changed.connect(self._update_dirty_indicator)
+        self._stack.addWidget(self._inventory_editor)  # 4: items
+
         self._file_manager = FileManagerPanel()
         self._file_manager.file_load_requested.connect(self._load_file)
-        self._stack.addWidget(self._file_manager)  # 4: files
+        self._stack.addWidget(self._file_manager)  # 5: files
 
         main_layout.addWidget(self._stack, 1)
 
@@ -456,7 +461,7 @@ class MainWindow(QMainWindow):
             show_toast(self, "Load a save file first", "warning")
             self._nav.set_active_view("digimon")
             return
-        view_map = {"digimon": 0, "grid": 1, "scan": 2, "agent": 3, "files": 4}
+        view_map = {"digimon": 0, "grid": 1, "scan": 2, "agent": 3, "items": 4, "files": 5}
         idx = view_map.get(name, 1)
         self._stack.setCurrentIndex(idx)
         self._nav.set_active_view(name)
@@ -471,6 +476,7 @@ class MainWindow(QMainWindow):
             self._editor.clear()
             self._scan_editor.set_save_file(self._save_file)
             self._agent_editor.set_save_file(self._save_file)
+            self._inventory_editor.set_save_file(self._save_file)
             self._current_entry = None
 
             # Compute scan stats for summary

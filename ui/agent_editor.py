@@ -5,7 +5,7 @@ Edit money, Tamer Points, agent rank, and unlock skill trees.
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QLabel,
                               QSpinBox, QGroupBox, QFrame, QHBoxLayout,
-                              QPushButton, QMessageBox)
+                              QPushButton, QMessageBox, QLineEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from ui.style import (ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
@@ -47,6 +47,12 @@ class AgentEditor(QWidget):
         form = QFormLayout()
         form.setSpacing(8)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self._name_edit = QLineEdit()
+        self._name_edit.setMaxLength(30)
+        self._name_edit.setPlaceholderText("Player name")
+        self._name_edit.editingFinished.connect(self._on_name_changed)
+        form.addRow("Player Name:", self._name_edit)
 
         self._money_spin = QSpinBox()
         self._money_spin.setRange(0, 9_999_999)
@@ -163,6 +169,7 @@ class AgentEditor(QWidget):
         self._updating = True
         self._save_file = save_file
 
+        self._name_edit.setText(save_file.read_str(0x0FDE90, 32))
         self._money_spin.setValue(save_file.read_agent_u32(0x058))
         self._tp_avail_spin.setValue(save_file.read_agent_u32(0x05C))
         self._tp_spin.setValue(save_file.read_agent_u32(0x060))
@@ -240,6 +247,14 @@ class AgentEditor(QWidget):
             return
         for cat_id in CATEGORIES:
             self._unlock_category(cat_id, skip_confirm=True)
+
+    def _on_name_changed(self):
+        if not self._updating and self._save_file:
+            name = self._name_edit.text().strip()
+            if not name:
+                return
+            self._save_file.write_player_name(name)
+            self.data_changed.emit()
 
     def _on_money_changed(self, value):
         if not self._updating and self._save_file:

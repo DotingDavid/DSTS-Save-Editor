@@ -175,10 +175,6 @@ class ScanEditor(QWidget):
         btn_100.clicked.connect(lambda: self._set_all(100))
         toolbar.addWidget(btn_100)
 
-        btn_200 = QPushButton("Set All 200%")
-        btn_200.clicked.connect(lambda: self._set_all(200))
-        toolbar.addWidget(btn_200)
-
         btn_clear = QPushButton("Clear All")
         btn_clear.clicked.connect(lambda: self._set_all(0))
         toolbar.addWidget(btn_clear)

@@ -57,6 +57,7 @@ DigimonSaveEditor/
 - **ANSE watermark:** 0x000904-0x001000 (1,788 bytes safe padding — game never touches, confirmed 3 resave cycles). Format: `ANSE|version|uuid`
 - **Digimon roster:** Party+box at 0x001000 (stride 0x150), farm at 0x053000 (stride 0x158)
 - **Scan table:** 583 entries at 0x05C100, stride 4 (Int16 digi_id + Int16 scan_pct)
+- **Inventory:** At 0x06E300 — 1500 slots × 24 bytes (index, item_id, qty, flags, flags2, timestamp)
 - **Agent info:** At 0x0FDE80 — rank, money, TP, skill counts
 - **Discovery table:** At 0x078000 — 432 flag/id pairs
 - **Per-Digimon padding:** +0x20 to +0x5F (64 bytes zeros per Digimon, potential UUID storage — NOT YET TESTED)
@@ -99,6 +100,7 @@ These fields have been verified through save-diffs and can be safely modified:
 - Scan percentages (scan table) — 0-200 per Digimon
 - Money (agent base + 0x58)
 - Tamer Points (agent base + 0x60)
+- Item quantities (inventory at 0x06E300, 24-byte stride, 1500 slots)
 
 ## UI Design Goals
 - Clean, dark theme matching ANAMNESIS aesthetic
