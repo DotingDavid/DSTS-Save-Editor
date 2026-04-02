@@ -589,6 +589,9 @@ class MainWindow(QMainWindow):
                     dlg.selected_id, dlg.level, dlg.personality_id)
                 self._roster = self._save_file.read_roster()
                 self._grid.set_roster(self._roster)
+                scan_count, scan_100 = self._save_file.scan_summary()
+                self._nav.update_summary(self._roster, scan_count, scan_100)
+                self._status_count.setText(f"{len(self._roster)} Digimon")
                 self._update_dirty_indicator()
                 from save_data import get_digimon_name
                 name = get_digimon_name(dlg.selected_id)
@@ -611,6 +614,9 @@ class MainWindow(QMainWindow):
             new_off = self._save_file.clone_digimon(entry["_offset"])
             self._roster = self._save_file.read_roster()
             self._grid.set_roster(self._roster)
+            scan_count, scan_100 = self._save_file.scan_summary()
+            self._nav.update_summary(self._roster, scan_count, scan_100)
+            self._status_count.setText(f"{len(self._roster)} Digimon")
             self._update_dirty_indicator()
             show_toast(self, f"Cloned {name} to box", "success")
         except Exception as e:
@@ -658,6 +664,9 @@ class MainWindow(QMainWindow):
             self._save_file.import_digimon(data)
             self._roster = self._save_file.read_roster()
             self._grid.set_roster(self._roster)
+            scan_count, scan_100 = self._save_file.scan_summary()
+            self._nav.update_summary(self._roster, scan_count, scan_100)
+            self._status_count.setText(f"{len(self._roster)} Digimon")
             self._update_dirty_indicator()
             show_toast(self, f"Imported {species}", "success")
         except Exception as e:
