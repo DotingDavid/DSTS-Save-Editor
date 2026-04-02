@@ -186,14 +186,20 @@ def _load_all_items():
         items.append(dict(row))
 
     # Add skill discs (attachment skills) from skill_names table
-    # These are inventory items with IDs 30000+ that equip as skills
+    # Only include real attachment skills — those learnable by Digimon
+    # (excludes battle messages, combat text, and other garbage)
+    existing_ids = {i["id"] for i in items}
     for row in db.execute(
-        "SELECT sn.skill_id as id, sn.name, s.description "
+        "SELECT CAST(sn.skill_id AS INT) as id, sn.name, s.description "
         "FROM skill_names sn "
-        "LEFT JOIN skills s ON sn.skill_id = s.id "
-        "WHERE sn.skill_id >= 30000 AND sn.name != '' "
-        "ORDER BY sn.skill_id"
+        "JOIN skills s ON sn.skill_id = s.id "
+        "JOIN digimon_skills ds ON s.id = ds.skill_id "
+        "WHERE ds.learn_level > 0 AND sn.name != '' "
+        "GROUP BY sn.skill_id "
+        "ORDER BY sn.name"
     ):
+        if row["id"] in existing_ids:
+            continue
         desc = (row["description"] or "").replace("\n", " ").strip()
         items.append({
             "id": row["id"],
