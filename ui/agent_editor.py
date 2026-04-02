@@ -457,6 +457,19 @@ class _CategoryTab(QWidget):
         _, _, purchased, _ = self._save_file.read_agent_skill(skill_index)
 
         if purchased:
+            # Check if any purchased skill depends on this one
+            sid = info.get('id', skill_index + 1)
+            for i in range(208):
+                other = catalog[i]
+                if other.get('prerequisite') == sid:
+                    _, _, other_purchased, _ = self._save_file.read_agent_skill(i)
+                    if other_purchased:
+                        dep_name = other.get('name_en', f'Skill {other["id"]}')
+                        from ui.toast import show_toast
+                        show_toast(self.window(),
+                                   f"Can't refund — {dep_name} depends on this",
+                                   "info")
+                        return
             self._save_file.refund_agent_skill(skill_index)
         else:
             prereq_id = info.get('prerequisite', 0)
