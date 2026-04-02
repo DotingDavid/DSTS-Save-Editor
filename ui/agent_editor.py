@@ -1,6 +1,6 @@
 """Agent/Player data editor.
 
-Edit money, Tamer Points, agent rank, and manage individual agent skills
+Edit money, Anomaly Points, agent rank, and manage individual agent skills
 with a visual skill tree grid. Horizontal tabs per category, hover for
 details, click to toggle buy/refund with prerequisite enforcement.
 """
@@ -287,7 +287,7 @@ class _CategoryTab(QWidget):
         unlock_btn = QPushButton("Unlock All")
         unlock_btn.setFixedHeight(24)
         unlock_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        unlock_btn.setToolTip("Free unlock — no TP cost")
+        unlock_btn.setToolTip("Free unlock — no AP cost")
         unlock_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {TEXT_SECONDARY};
@@ -434,7 +434,7 @@ class _CategoryTab(QWidget):
 
         cost = info.get('tp_cost', 0)
         status = "Purchased" if purchased else "Locked"
-        self._d_cost.setText(f"{cost} TP  \u2014  {status}")
+        self._d_cost.setText(f"{cost} AP  \u2014  {status}")
 
         self._d_desc.setText(info.get('description', ''))
 
@@ -511,7 +511,7 @@ class _CategoryTab(QWidget):
         name = CATEGORIES[self._cat_id][0]
         reply = QMessageBox.question(
             self, "Unlock",
-            f"Unlock all {name} skills?\nFree — no TP cost.",
+            f"Unlock all {name} skills?\nFree — no AP cost.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -543,7 +543,7 @@ class _CategoryTab(QWidget):
             return
         reply = QMessageBox.question(
             self, "Refund",
-            f"Refund {count} {name} skills?\n+{total_tp} TP returned.",
+            f"Refund {count} {name} skills?\n+{total_tp} AP returned.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -617,7 +617,7 @@ class AgentEditor(QWidget):
             "letter-spacing: 3px;")
         tree_header.addWidget(lbl)
 
-        tp_lbl = QLabel("TP:")
+        tp_lbl = QLabel("AP:")
         tp_lbl.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 10px;")
         tree_header.addWidget(tp_lbl)
         self._tp_spin = QSpinBox()
@@ -643,7 +643,7 @@ class AgentEditor(QWidget):
         unlock_all = QPushButton("Unlock All")
         unlock_all.setFixedHeight(22)
         unlock_all.setCursor(Qt.CursorShape.PointingHandCursor)
-        unlock_all.setToolTip("Free unlock ALL skills — no TP cost")
+        unlock_all.setToolTip("Free unlock ALL skills — no AP cost")
         unlock_all.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {ACCENT};
@@ -715,7 +715,7 @@ class AgentEditor(QWidget):
             return
         reply = QMessageBox.question(
             self, "Unlock All",
-            "Unlock ALL agent skills?\nFree — no TP cost.",
+            "Unlock ALL agent skills?\nFree — no AP cost.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -734,7 +734,7 @@ class AgentEditor(QWidget):
             return
         reply = QMessageBox.question(
             self, "Refund All",
-            f"Refund ALL {count} skills?\n+{total} TP returned.",
+            f"Refund ALL {count} skills?\n+{total} AP returned.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
             return

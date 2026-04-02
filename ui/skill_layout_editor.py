@@ -158,7 +158,7 @@ class _GridCell(QFrame):
         name_en = info.get('name_en', '') if info else ''
         title = f"<b>{name_en}</b>" if name_en else f"<b>Skill {skill_id}</b>"
         self.setToolTip(
-            f"{title}  ({cost} TP)<br>"
+            f"{title}  ({cost} AP)<br>"
             f"<span style='color:#ccc'>{desc}</span>")
         self.update()
 
@@ -280,7 +280,7 @@ class _PaletteTile(QFrame):
         root_tag = "ROOT  |  " if self._is_root else ""
         title = f"<b>{root_tag}{name_en}</b>" if name_en else f"<b>{root_tag}Skill {skill_info['id']}</b>"
         self.setToolTip(
-            f"{title}  ({cost} TP)<br>"
+            f"{title}  ({cost} AP)<br>"
             f"<span style='color:#ccc'>{desc}</span>")
 
         self.setStyleSheet(f"""
