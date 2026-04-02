@@ -265,6 +265,58 @@ def close_db():
         _db_conn = None
 
 
+import re as _re
+
+_tamer_skill_cache = None
+
+
+def get_tamer_skill_catalog():
+    """Return cached list of all 208 tamer skills with DB metadata.
+
+    Each entry: {id, name_jp, description, cost, tree_group, boost_value}
+    Descriptions have template markers resolved with boost_value.
+    """
+    global _tamer_skill_cache
+    if _tamer_skill_cache is not None:
+        return _tamer_skill_cache
+
+    db = _get_db()
+    rows = db.execute("""
+        SELECT t.id, t.description, t.cost, t.tree_group, t.boost_value,
+               n.name AS name_jp, t.name_en,
+               t.grid_position, t.prerequisite, t.effect_type_id,
+               t.digimon_req, t.tp_cost
+        FROM tamer_skills t
+        LEFT JOIN tamer_skill_names n ON CAST(t.id AS TEXT) = n.key
+        ORDER BY t.id
+    """).fetchall()
+
+    catalog = []
+    for r in rows:
+        desc = r["description"] or ""
+        bv = r["boost_value"] or 0
+        # Resolve template markers {d0}, {d1}, ... {d6} with int(boost_value)
+        desc = _re.sub(r'\{d\d\}', str(int(bv)), desc)
+        desc = desc.replace('\n', ' ')
+        catalog.append({
+            'id': r["id"],
+            'name_jp': r["name_jp"] or '',
+            'description': desc,
+            'cost': r["cost"] or 0,
+            'tree_group': r["tree_group"],
+            'boost_value': bv,
+            'grid_position': r["grid_position"] or '',
+            'prerequisite': r["prerequisite"] or 0,
+            'effect_type_id': r["effect_type_id"] or 0,
+            'digimon_req': r["digimon_req"] or 0,
+            'tp_cost': r["tp_cost"] or 0,
+            'name_en': r["name_en"] or '',
+        })
+
+    _tamer_skill_cache = catalog
+    return catalog
+
+
 def get_digimon_name(db_id):
     """Look up Digimon species name by database ID."""
     # Check mod overlay first
@@ -506,6 +558,64 @@ def list_save_slots(save_dir):
         except (ValueError, OSError):
             continue
     return slots
+
+
+def peek_save_info(path):
+    """Quickly read player name, money, and signature status from an encrypted save.
+
+    Used by the file manager to show previews on save slot cards.
+    Returns dict with 'name', 'money', 'signed', or None on error.
+    """
+    try:
+        with open(path, 'rb') as f:
+            raw = f.read()
+        if len(raw) != save_crypto.SAVE_FILE_SIZE:
+            return None
+        data = save_crypto.decrypt(raw)
+        name_bytes = data[0x0FDE90:0x0FDE90 + 32]
+        name = name_bytes.split(b'\x00')[0].decode('ascii', errors='replace').strip()
+        money = struct.unpack_from('<I', data, AGENT_BASE_OFFSET + 0x058)[0]
+        uid = read_save_uid(data)
+        # Find stride base in party/box region (same logic as _find_stride_base)
+        party = []
+        pb_base = None
+        for off in range(0x001000, 0x001000 + 0x150 * 20, 4):
+            did = struct.unpack_from('<I', data, off)[0]
+            if not (1 <= did <= 10000):
+                continue
+            noff = off + 4
+            if noff + 0x64 > len(data):
+                continue
+            ne = data.find(b'\x00', noff, noff + 32)
+            if ne <= noff:
+                continue
+            lv = struct.unpack_from('<i', data, noff + 0x60)[0]
+            if 1 <= lv <= 99:
+                pb_base = 0x001000 + ((off - 0x001000) % 0x150)
+                break
+        # Party = positions 2-7 (first 2 are sentinels)
+        if pb_base is not None:
+            for i in range(2, 8):
+                off = pb_base + i * 0x150
+                did = struct.unpack_from('<I', data, off)[0]
+                nick = ''
+                if 1 <= did <= 10000:
+                    nb = data[off + 4:off + 36]
+                    nick = nb.split(b'\x00')[0].decode(
+                        'ascii', errors='replace').strip()
+                else:
+                    did = 0
+                party.append({'db_id': did, 'nickname': nick})
+        else:
+            party = [{'db_id': 0, 'nickname': ''} for _ in range(6)]
+        return {
+            'name': name if name else '???',
+            'money': money,
+            'uid': uid,
+            'party': party,
+        }
+    except Exception:
+        return None
 
 
 # ── Save file model ────────────────────────────────────────────────
@@ -1316,12 +1426,65 @@ class SaveFile:
         visible = self._data[off + 9]
         return tree_group, category, purchased, visible
 
-    def write_agent_skill_flags(self, skill_index, purchased, visible):
-        """Write purchased and visible flags for an agent skill."""
+    def write_agent_skill_flags(self, skill_index, purchased, visible, unknown=None):
+        """Write purchased, visible, and optionally unknown flags for an agent skill."""
         off = AGENT_BASE_OFFSET + AGENT_SKILL_OFFSET + skill_index * AGENT_SKILL_STRIDE
         self._data[off + 8] = purchased
         self._data[off + 9] = visible
+        if unknown is not None:
+            self._data[off + 10] = unknown
         self._mark_dirty()
+
+    # Category ID → count offset (relative to agent base)
+    _CAT_COUNT_OFFSETS = {1: 0x068, 2: 0x06C, 3: 0x070, 4: 0x074, 5: 0x080}
+
+    def buy_agent_skill(self, skill_index):
+        """Buy a skill: set flags, subtract TP cost, increment category count.
+
+        Returns True on success, False if insufficient TP or already purchased.
+        """
+        _, cat, purchased, _ = self.read_agent_skill(skill_index)
+        if purchased:
+            return False
+        catalog = get_tamer_skill_catalog()
+        cost = catalog[skill_index]['tp_cost']
+        tp_avail = self.read_agent_u32(0x05C)
+        if tp_avail < cost:
+            return False
+        # Set all three flags to match natural purchased state
+        self.write_agent_skill_flags(skill_index, 1, 1, 1)
+        self.write_agent_u32(0x05C, tp_avail - cost)
+        # Increment category count
+        if cat in self._CAT_COUNT_OFFSETS:
+            old = self.read_agent_u32(self._CAT_COUNT_OFFSETS[cat])
+            self.write_agent_u32(self._CAT_COUNT_OFFSETS[cat], old + 1)
+        return True
+
+    def refund_agent_skill(self, skill_index):
+        """Refund a skill: clear purchased flag, return TP cost, decrement category count.
+
+        Leaves visible and unknown flags untouched so the skill stays in the game tree.
+        Returns True on success, False if not purchased.
+        """
+        off = AGENT_BASE_OFFSET + AGENT_SKILL_OFFSET + skill_index * AGENT_SKILL_STRIDE
+        cat = struct.unpack('<I', self._data[off + 4:off + 8])[0]
+        purchased = self._data[off + 8]
+        if not purchased:
+            return False
+        catalog = get_tamer_skill_catalog()
+        cost = catalog[skill_index]['tp_cost']
+        # Only clear purchased — leave visible and unknown as-is
+        self._data[off + 8] = 0
+        self._mark_dirty()
+        # Return TP
+        tp_avail = self.read_agent_u32(0x05C)
+        self.write_agent_u32(0x05C, tp_avail + cost)
+        # Decrement category count
+        if cat in self._CAT_COUNT_OFFSETS:
+            old = self.read_agent_u32(self._CAT_COUNT_OFFSETS[cat])
+            if old > 0:
+                self.write_agent_u32(self._CAT_COUNT_OFFSETS[cat], old - 1)
+        return True
 
     # ── Save to disk ──
 

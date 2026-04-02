@@ -488,6 +488,7 @@ class MainWindow(QMainWindow):
             self._status_file.setText(f"File: {basename}")
             self._status_count.setText(f"{len(self._roster)} Digimon")
             self._update_dirty_indicator()
+            self._file_manager.set_loaded_path(path)
             self._save_btn.setEnabled(True)
             self._act_save_as.setEnabled(True)
             self._switch_view("grid")
