@@ -391,9 +391,10 @@ class _CategoryTab(QWidget):
         for skill in cat_skills:
             info = skill['catalog']
             sid = info.get('id', skill['index'] + 1)
-            prereq = info.get('prerequisite', 0)
-            if prereq and prereq in id_to_cell and sid in id_to_cell:
-                connections.append((id_to_cell[sid], id_to_cell[prereq]))
+            for key in ('prerequisite', 'prerequisite2'):
+                prereq = info.get(key, 0)
+                if prereq and prereq in id_to_cell and sid in id_to_cell:
+                    connections.append((id_to_cell[sid], id_to_cell[prereq]))
         grid_widget.set_connections(connections)
         grid_widget.setSizePolicy(
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -437,13 +438,17 @@ class _CategoryTab(QWidget):
 
         self._d_desc.setText(info.get('description', ''))
 
-        prereq_id = info.get('prerequisite', 0)
-        if prereq_id and prereq_id - 1 < len(catalog):
-            pi = catalog[prereq_id - 1]
-            pname = pi.get('name_en', f'Skill {prereq_id}')
-            _, _, pp, _ = self._save_file.read_agent_skill(prereq_id - 1)
-            mark = "\u2713" if pp else "\u2717"
-            self._d_prereq.setText(f"Requires: {mark} {pname}")
+        prereq_lines = []
+        for key in ('prerequisite', 'prerequisite2'):
+            pid = info.get(key, 0)
+            if pid and pid - 1 < len(catalog):
+                pi = catalog[pid - 1]
+                pname = pi.get('name_en', f'Skill {pid}')
+                _, _, pp, _ = self._save_file.read_agent_skill(pid - 1)
+                mark = "\u2713" if pp else "\u2717"
+                prereq_lines.append(f"{mark} {pname}")
+        if prereq_lines:
+            self._d_prereq.setText("Requires: " + "\n".join(prereq_lines))
         else:
             self._d_prereq.setText("")
 
@@ -457,31 +462,34 @@ class _CategoryTab(QWidget):
         _, _, purchased, _ = self._save_file.read_agent_skill(skill_index)
 
         if purchased:
-            # Check if any purchased skill depends on this one
+            # Check if any purchased skill depends on this one (either prereq)
             sid = info.get('id', skill_index + 1)
             for i in range(208):
                 other = catalog[i]
-                if other.get('prerequisite') == sid:
+                if other.get('prerequisite') == sid or other.get('prerequisite2') == sid:
                     _, _, other_purchased, _ = self._save_file.read_agent_skill(i)
                     if other_purchased:
                         dep_name = other.get('name_en', f'Skill {other["id"]}')
                         from ui.toast import show_toast
                         show_toast(self.window(),
-                                   f"Can't refund — {dep_name} depends on this",
+                                   f"Can't refund \u2014 {dep_name} depends on this",
                                    "info")
                         return
             self._save_file.refund_agent_skill(skill_index)
         else:
-            prereq_id = info.get('prerequisite', 0)
-            if prereq_id:
-                prereq_idx = prereq_id - 1
-                if 0 <= prereq_idx < 208:
-                    _, _, pp, _ = self._save_file.read_agent_skill(prereq_idx)
-                    if not pp:
-                        pname = catalog[prereq_idx].get('name_en', '')
-                        from ui.toast import show_toast
-                        show_toast(self.window(), f"Requires: {pname}", "info")
-                        return
+            # Check both prerequisites
+            for prereq_key in ('prerequisite', 'prerequisite2'):
+                prereq_id = info.get(prereq_key, 0)
+                if prereq_id:
+                    prereq_idx = prereq_id - 1
+                    if 0 <= prereq_idx < 208:
+                        _, _, pp, _ = self._save_file.read_agent_skill(prereq_idx)
+                        if not pp:
+                            pname = catalog[prereq_idx].get('name_en', '')
+                            from ui.toast import show_toast
+                            show_toast(self.window(),
+                                       f"Requires: {pname}", "info")
+                            return
             self._save_file.buy_agent_skill(skill_index)
 
         # Update cell

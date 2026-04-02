@@ -284,8 +284,8 @@ def get_tamer_skill_catalog():
     rows = db.execute("""
         SELECT t.id, t.description, t.cost, t.tree_group, t.boost_value,
                n.name AS name_jp, t.name_en,
-               t.grid_position, t.prerequisite, t.effect_type_id,
-               t.digimon_req, t.tp_cost
+               t.grid_position, t.prerequisite, t.prerequisite2,
+               t.effect_type_id, t.digimon_req, t.tp_cost
         FROM tamer_skills t
         LEFT JOIN tamer_skill_names n ON CAST(t.id AS TEXT) = n.key
         ORDER BY t.id
@@ -307,6 +307,7 @@ def get_tamer_skill_catalog():
             'boost_value': bv,
             'grid_position': r["grid_position"] or '',
             'prerequisite': r["prerequisite"] or 0,
+            'prerequisite2': r["prerequisite2"] or 0,
             'effect_type_id': r["effect_type_id"] or 0,
             'digimon_req': r["digimon_req"] or 0,
             'tp_cost': r["tp_cost"] or 0,
