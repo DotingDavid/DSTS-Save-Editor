@@ -1071,10 +1071,11 @@ class SaveFile:
     # ── Clone ──
 
     def find_empty_slot(self):
-        """Find the first empty box slot at the correct stride alignment.
+        """Find the next box slot at the roster scan boundary.
 
-        Uses the same dynamic base detection as read_roster to ensure
-        the new entry will be found on the next scan.
+        The roster scanner reads contiguous active=1 entries and stops
+        at the first active=0. New entries must go at that boundary
+        so the scanner finds them. We overwrite the stale data there.
         """
         d = self._data
         db = _get_db()
@@ -1085,15 +1086,16 @@ class SaveFile:
         pb_base = self._find_stride_base(0x001000, 0x009000, 0x150, valid_ids)
 
         if pb_base is None:
-            return None  # stride detection failed — refuse to guess
+            return None
 
-        # Scan stride-aligned slots starting after party (skip first ~8)
-        # Look for an empty slot (db_id == 0)
-        for db_off in range(pb_base + 8 * 0x150, 0x053000, 0x150):
+        # Find the first active=0 slot after party (slot 8+)
+        # This is exactly where read_roster stops scanning.
+        PARTY_SLOTS = 8
+        for db_off in range(pb_base + PARTY_SLOTS * 0x150, 0x053000, 0x150):
             name_off = db_off + 4
-            db_id = struct.unpack('<I', d[db_off:db_off + 4])[0]
-            if db_id == 0 and d[name_off:name_off + 4] == b'\x00\x00\x00\x00':
-                return name_off  # return name offset (consistent with struct layout)
+            active = struct.unpack('<I', d[name_off + 0x140:name_off + 0x144])[0]
+            if active == 0:
+                return name_off
         return None
 
     def clone_digimon(self, source_offset):
