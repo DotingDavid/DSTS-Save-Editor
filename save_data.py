@@ -1240,6 +1240,25 @@ class SaveFile:
         struct.pack_into('<i', self._data, dest + 0x100, 50 * 1000)
         # Bond (100% = 10000 stored as float ×100)
         struct.pack_into('<f', self._data, dest + 0x13C, 100.0)
+        # Per-Digimon UUID stamp (64 bytes at +0x20)
+        # Format: AN\x01 prefix + unique bytes + shared save ID + user name
+        # Copy shared portion from first roster entry, generate new unique part
+        roster = self.read_roster()
+        if roster:
+            template_off = roster[0]['_offset']
+            # Copy the shared section (bytes 20-63 of the UUID block)
+            template_uuid = bytes(self._data[template_off + 0x20:template_off + 0x60])
+            # Write prefix + new random bytes + shared tail
+            self._data[dest + 0x20] = 0x41  # 'A'
+            self._data[dest + 0x21] = 0x4E  # 'N'
+            self._data[dest + 0x22] = 0x01  # version
+            rand_bytes = random.randbytes(17)
+            for i, b in enumerate(rand_bytes):
+                self._data[dest + 0x23 + i] = b
+            # Copy shared portion (save ID + user name) from template
+            for i in range(20, 64):
+                self._data[dest + 0x20 + i] = template_uuid[i]
+
         # Creation hash
         new_hash = random.randint(0x1000, 0xFFFFFFFF)
         struct.pack_into('<I', self._data, dest + 0x148, new_hash)
