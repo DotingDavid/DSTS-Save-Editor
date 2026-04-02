@@ -18,20 +18,28 @@ _equip_list = None
 
 
 def _load_skill_list():
-    """Load all skills for the combo box."""
+    """Load attachment skills only (learn_level > 0) for the combo box.
+
+    Special skills (learn_level=0) are NOT included — they're shown
+    read-only in the special skills section above.
+    """
     global _skill_list
     if _skill_list is not None:
         return _skill_list
     from save_data import _get_db
     db = _get_db()
     _skill_list = [(0, "(Empty)")]
-    for row in db.execute("SELECT id, name FROM skills ORDER BY name"):
+    for row in db.execute(
+            "SELECT s.id, s.name FROM skills s "
+            "JOIN digimon_skills ds ON s.id = ds.skill_id "
+            "WHERE ds.learn_level > 0 "
+            "GROUP BY s.id ORDER BY s.name"):
         if row["name"]:
             _skill_list.append((row["id"], row["name"]))
+    existing_ids = {s[0] for s in _skill_list}
     # Append modded skill names
     from save_data import _mod_overlay
     if _mod_overlay and _mod_overlay.is_active and _mod_overlay.skill_names:
-        existing_ids = {s[0] for s in _skill_list}
         for sid_str, name in _mod_overlay.skill_names.items():
             try:
                 sid = int(sid_str)
