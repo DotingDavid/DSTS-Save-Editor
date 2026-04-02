@@ -471,6 +471,8 @@ class MainWindow(QMainWindow):
     def _load_file(self, path):
         try:
             self._save_file = SaveFile(path)
+            # Auto-rescue Digimon created by older versions past scanner boundary
+            rescued = self._save_file.rescue_lost_digimon()
             self._roster = self._save_file.read_roster()
             self._grid.set_roster(self._roster)
             self._editor.clear()
@@ -493,7 +495,10 @@ class MainWindow(QMainWindow):
             self._act_save_as.setEnabled(True)
             self._switch_view("grid")
 
-            show_toast(self, f"Loaded {len(self._roster)} Digimon from {basename}", "info")
+            if rescued:
+                show_toast(self, f"Rescued {rescued} lost Digimon from {basename}", "success")
+            else:
+                show_toast(self, f"Loaded {len(self._roster)} Digimon from {basename}", "info")
             logger.info("Loaded %s: %d Digimon", basename, len(self._roster))
         except Exception as e:
             QMessageBox.critical(self, "Load Error", f"Failed to load save file:\n{e}")

@@ -1098,6 +1098,72 @@ class SaveFile:
                 return name_off
         return None
 
+    def rescue_lost_digimon(self):
+        """Find and relocate Digimon created past the roster scanner boundary.
+
+        Previous versions of create_digimon placed entries at db_id=0 slots
+        past stale active=0 entries, making them unreachable by read_roster.
+        This finds active=1 entries past the boundary and moves them to
+        valid positions.
+
+        Returns the number of rescued entries.
+        """
+        d = self._data
+        db = _get_db()
+        valid_ids = set(r["id"] for r in db.execute("SELECT id FROM digimon"))
+        pb_base = self._find_stride_base(0x001000, 0x009000, 0x150, valid_ids)
+        if pb_base is None:
+            return 0
+
+        PARTY_SLOTS = 8
+        STRIDE = 0x150
+
+        # Find the scanner boundary (first active=0 after party)
+        boundary_off = None
+        for db_off in range(pb_base + PARTY_SLOTS * STRIDE, 0x053000, STRIDE):
+            name_off = db_off + 4
+            active = struct.unpack('<I', d[name_off + 0x140:name_off + 0x144])[0]
+            if active == 0:
+                boundary_off = db_off
+                break
+
+        if boundary_off is None:
+            return 0  # no boundary found, box is full
+
+        # Scan past the boundary for lost active=1 entries
+        lost = []
+        for db_off in range(boundary_off + STRIDE, 0x053000, STRIDE):
+            name_off = db_off + 4
+            db_id = struct.unpack('<I', d[db_off:db_off + 4])[0]
+            active = struct.unpack('<I', d[name_off + 0x140:name_off + 0x144])[0]
+            if active == 1 and db_id in valid_ids:
+                lv = struct.unpack('<i', d[name_off + 0x60:name_off + 0x64])[0]
+                if 1 <= lv <= 99:
+                    lost.append(db_off)
+
+        if not lost:
+            return 0
+
+        # Move each lost entry to the boundary, advancing boundary each time
+        rescued = 0
+        current_boundary = boundary_off
+        for lost_off in lost:
+            # Copy the full struct (db_id at -0 through name+0x14F)
+            src = lost_off
+            dst = current_boundary
+            for i in range(STRIDE):
+                d[dst + i] = d[src + i]
+            # Clear the source
+            for i in range(STRIDE):
+                d[src + i] = 0
+            rescued += 1
+            # Advance boundary
+            current_boundary += STRIDE
+
+        if rescued:
+            self._mark_dirty()
+        return rescued
+
     def clone_digimon(self, source_offset):
         """Clone a Digimon to an empty box slot. Returns new offset or raises."""
         dest = self.find_empty_slot()

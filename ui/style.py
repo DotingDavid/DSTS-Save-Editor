@@ -221,6 +221,44 @@ QSpinBox:hover {{
 QSpinBox:focus {{
     border-color: {ACCENT};
 }}
+QSpinBox::up-button {{
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left: 1px solid {BORDER};
+    border-bottom: 1px solid {BORDER};
+    border-top-right-radius: 4px;
+    background: {BG_HOVER};
+}}
+QSpinBox::up-button:hover {{
+    background: {ACCENT_DIM};
+}}
+QSpinBox::up-arrow {{
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid {TEXT_PRIMARY};
+    width: 0; height: 0;
+}}
+QSpinBox::down-button {{
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 20px;
+    border-left: 1px solid {BORDER};
+    border-top: 1px solid {BORDER};
+    border-bottom-right-radius: 4px;
+    background: {BG_HOVER};
+}}
+QSpinBox::down-button:hover {{
+    background: {ACCENT_DIM};
+}}
+QSpinBox::down-arrow {{
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid {TEXT_PRIMARY};
+    width: 0; height: 0;
+}}
 
 QLineEdit {{
     background-color: {BG_INPUT};
