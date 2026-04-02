@@ -32,10 +32,11 @@ ITEM_CATEGORIES = {
     8: "Quest Items",
     9: "Digimon Cards",
     "eggs": "Evolution Items",
+    "discs": "Skill Discs",
     None: "Other",
 }
 
-_CAT_ORDER = [0, 1, "eggs", 2, 4, 5, 6, 7, 8, 9, None]
+_CAT_ORDER = [0, 1, "eggs", 2, 4, "discs", 5, 6, 7, 8, 9, None]
 
 _CAT_COLORS = {
     0: "#66BB6A",   # Recovery — green
@@ -48,6 +49,7 @@ _CAT_COLORS = {
     8: "#78909C",   # Quest Items — gray
     9: "#616161",   # Digimon Cards — dim
     "eggs": "#FFD54F",  # Digi-Eggs — gold
+    "discs": "#29B6F6",  # Skill Discs — light blue
     None: "#9E9E9E",
 }
 
@@ -84,7 +86,7 @@ _SUB_CATEGORIES = {
 # Representative icon per category
 _CAT_ICONS = {
     0: 40, 1: 57, 2: 63, 4: 0, 5: 64, 6: 34, 7: 78, 8: 73, 9: 74,
-    "eggs": 72, None: 73,
+    "eggs": 72, "discs": 0, None: 73,
 }
 
 # Icon grid constants
@@ -127,6 +129,8 @@ def _hex_rgb(hex_color):
 
 def _effective_category(item):
     cat = item.get("category")
+    if cat == "discs":
+        return "discs"
     if cat == 1 and item.get("icon_index") == 72:
         return "eggs"
     return cat
@@ -180,6 +184,27 @@ def _load_all_items():
         "ORDER BY category, CAST(item_id AS INT)"
     ):
         items.append(dict(row))
+
+    # Add skill discs (attachment skills) from skill_names table
+    # These are inventory items with IDs 30000+ that equip as skills
+    for row in db.execute(
+        "SELECT sn.skill_id as id, sn.name, s.description "
+        "FROM skill_names sn "
+        "LEFT JOIN skills s ON sn.skill_id = s.id "
+        "WHERE sn.skill_id >= 30000 AND sn.name != '' "
+        "ORDER BY sn.skill_id"
+    ):
+        desc = (row["description"] or "").replace("\n", " ").strip()
+        items.append({
+            "id": row["id"],
+            "name": row["name"],
+            "description": desc,
+            "category": "discs",
+            "buy_price": 0,
+            "sell_price": 0,
+            "icon_index": 0,  # skill discs use the generic attachment icon
+        })
+
     return items
 
 
