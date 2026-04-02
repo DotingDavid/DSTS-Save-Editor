@@ -270,6 +270,19 @@ import re as _re
 _tamer_skill_cache = None
 
 
+_skill_id_to_index = None
+
+
+def _get_skill_id_to_index():
+    """Build skill_id → save_index lookup. IDs are non-contiguous (gaps at 47-50 etc)."""
+    global _skill_id_to_index
+    if _skill_id_to_index is None:
+        db = _get_db()
+        rows = db.execute("SELECT id FROM tamer_skills ORDER BY id").fetchall()
+        _skill_id_to_index = {r["id"]: i for i, r in enumerate(rows)}
+    return _skill_id_to_index
+
+
 def get_tamer_skill_catalog():
     """Return cached list of all 208 tamer skills with DB metadata.
 

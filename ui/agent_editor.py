@@ -17,7 +17,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
 
 from ui.style import (ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
                        BORDER, BG_INPUT, PERS_COLORS)
-from save_data import get_tamer_skill_catalog
+from save_data import get_tamer_skill_catalog, _get_skill_id_to_index
 from app_paths import get_data_dir
 from ui.skill_layout_editor import load_skill_layout
 
@@ -439,12 +439,14 @@ class _CategoryTab(QWidget):
         self._d_desc.setText(info.get('description', ''))
 
         prereq_lines = []
+        id_to_idx = _get_skill_id_to_index()
         for key in ('prerequisite', 'prerequisite2'):
             pid = info.get(key, 0)
-            if pid and pid - 1 < len(catalog):
-                pi = catalog[pid - 1]
+            pidx = id_to_idx.get(pid)
+            if pid and pidx is not None:
+                pi = catalog[pidx]
                 pname = pi.get('name_en', f'Skill {pid}')
-                _, _, pp, _ = self._save_file.read_agent_skill(pid - 1)
+                _, _, pp, _ = self._save_file.read_agent_skill(pidx)
                 mark = "\u2713" if pp else "\u2717"
                 prereq_lines.append(f"{mark} {pname}")
         if prereq_lines:
@@ -478,11 +480,12 @@ class _CategoryTab(QWidget):
             self._save_file.refund_agent_skill(skill_index)
         else:
             # Check both prerequisites
+            id_to_idx = _get_skill_id_to_index()
             for prereq_key in ('prerequisite', 'prerequisite2'):
                 prereq_id = info.get(prereq_key, 0)
                 if prereq_id:
-                    prereq_idx = prereq_id - 1
-                    if 0 <= prereq_idx < 208:
+                    prereq_idx = id_to_idx.get(prereq_id)
+                    if prereq_idx is not None:
                         _, _, pp, _ = self._save_file.read_agent_skill(prereq_idx)
                         if not pp:
                             pname = catalog[prereq_idx].get('name_en', '')
