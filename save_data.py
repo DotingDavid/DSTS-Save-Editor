@@ -1130,6 +1130,8 @@ class SaveFile:
         if not info:
             raise ValueError(f"Unknown Digimon ID: {db_id}")
         base_stats = get_base_stats(db_id)
+        growth_type = get_growth_type(db_id)
+        growth = get_growth_stats(growth_type, level)
 
         # Clear the full struct area (db_id at -4 through +0x14F)
         for i in range(0x154):
@@ -1146,9 +1148,17 @@ class SaveFile:
         # Personality
         self._data[dest + 0xEE] = personality_id & 0xFF
         struct.pack_into('<I', self._data, dest + 0xEC, personality_id << 16)
-        # Current HP/SP from base stats
-        struct.pack_into('<i', self._data, dest + 0x6C, base_stats[0])
-        struct.pack_into('<i', self._data, dest + 0x70, base_stats[1])
+        # White stats (growth from leveling — 7 stats at +0x74)
+        stat_names = ['hp', 'sp', 'atk', 'def', 'int', 'spi', 'spd']
+        for i, val in enumerate(growth):
+            struct.pack_into('<i', self._data, dest + 0x74 + i * 4, val)
+        # Current HP/SP = base + growth
+        struct.pack_into('<i', self._data, dest + 0x6C, base_stats[0] + growth[0])
+        struct.pack_into('<i', self._data, dest + 0x70, base_stats[1] + growth[1])
+        # Talent (reasonable starting value: 50, stored ×1000)
+        struct.pack_into('<i', self._data, dest + 0x100, 50 * 1000)
+        # Bond (100% = 10000 stored as float ×100)
+        struct.pack_into('<f', self._data, dest + 0x13C, 100.0)
         # Creation hash
         new_hash = random.randint(0x1000, 0xFFFFFFFF)
         struct.pack_into('<I', self._data, dest + 0x148, new_hash)
