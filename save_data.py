@@ -1236,6 +1236,10 @@ class SaveFile:
         # Current HP/SP = base + growth
         struct.pack_into('<i', self._data, dest + 0x6C, base_stats[0] + growth[0])
         struct.pack_into('<i', self._data, dest + 0x70, base_stats[1] + growth[1])
+        # Personality growth weights
+        struct.pack_into('<I', self._data, dest + 0xF0, 0x7F)
+        # Personality skill (default 1 — gets reassigned on personality change in-game)
+        struct.pack_into('<I', self._data, dest + 0xF8, 1)
         # Talent (reasonable starting value: 50, stored ×1000)
         struct.pack_into('<i', self._data, dest + 0x100, 50 * 1000)
         # Bond (100% = 10000 stored as float ×100)
