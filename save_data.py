@@ -1555,9 +1555,11 @@ class SaveFile:
     _CAT_COUNT_OFFSETS = {1: 0x068, 2: 0x06C, 3: 0x070, 4: 0x074, 5: 0x080}
 
     def buy_agent_skill(self, skill_index):
-        """Buy a skill: set flags, subtract TP cost, increment category count.
+        """Buy a skill: set flags, adjust AP, increment category count.
 
-        Returns True on success, False if insufficient TP or already purchased.
+        If Available AP < cost, auto-grants enough AP so the purchase
+        always succeeds. Updates both Available AP (0x05C) and
+        Total Spent (0x060) to keep the save consistent.
         """
         _, cat, purchased, _ = self.read_agent_skill(skill_index)
         if purchased:
@@ -1565,11 +1567,17 @@ class SaveFile:
         catalog = get_tamer_skill_catalog()
         cost = catalog[skill_index]['tp_cost']
         tp_avail = self.read_agent_u32(0x05C)
+        # Auto-grant AP if insufficient
         if tp_avail < cost:
-            return False
+            needed = cost - tp_avail
+            tp_avail += needed
+            self.write_agent_u32(0x05C, tp_avail)
         # Set all three flags to match natural purchased state
         self.write_agent_skill_flags(skill_index, 1, 1, 1)
         self.write_agent_u32(0x05C, tp_avail - cost)
+        # Update total spent
+        tp_spent = self.read_agent_u32(0x060)
+        self.write_agent_u32(0x060, tp_spent + cost)
         # Increment category count
         if cat in self._CAT_COUNT_OFFSETS:
             old = self.read_agent_u32(self._CAT_COUNT_OFFSETS[cat])
@@ -1592,9 +1600,13 @@ class SaveFile:
         # Only clear purchased — leave visible and unknown as-is
         self._data[off + 8] = 0
         self._mark_dirty()
-        # Return TP
+        # Return AP
         tp_avail = self.read_agent_u32(0x05C)
         self.write_agent_u32(0x05C, tp_avail + cost)
+        # Reduce total spent
+        tp_spent = self.read_agent_u32(0x060)
+        if tp_spent >= cost:
+            self.write_agent_u32(0x060, tp_spent - cost)
         # Decrement category count
         if cat in self._CAT_COUNT_OFFSETS:
             old = self.read_agent_u32(self._CAT_COUNT_OFFSETS[cat])
