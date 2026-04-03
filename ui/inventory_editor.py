@@ -32,7 +32,7 @@ ITEM_CATEGORIES = {
     8: "Quest Items",
     9: "Digimon Cards",
     "eggs": "Evolution Items",
-    "discs": "Skill Discs",
+    "discs": "Attachment Skills",
     None: "Other",
 }
 
@@ -49,7 +49,7 @@ _CAT_COLORS = {
     8: "#78909C",   # Quest Items — gray
     9: "#616161",   # Digimon Cards — dim
     "eggs": "#FFD54F",  # Digi-Eggs — gold
-    "discs": "#29B6F6",  # Skill Discs — light blue
+    "discs": "#42A5F5",  # Attachment Skills — blue
     None: "#9E9E9E",
 }
 
@@ -190,7 +190,8 @@ def _load_all_items():
     # (excludes battle messages, combat text, and other garbage)
     existing_ids = {i["id"] for i in items}
     for row in db.execute(
-        "SELECT CAST(sn.skill_id AS INT) as id, sn.name, s.description "
+        "SELECT CAST(sn.skill_id AS INT) as id, sn.name, s.description, "
+        "s.actual_element "
         "FROM skill_names sn "
         "JOIN skills s ON sn.skill_id = s.id "
         "JOIN digimon_skills ds ON s.id = ds.skill_id "
@@ -201,6 +202,7 @@ def _load_all_items():
         if row["id"] in existing_ids:
             continue
         desc = (row["description"] or "").replace("\n", " ").strip()
+        elem = row["actual_element"] if row["actual_element"] is not None else -1
         items.append({
             "id": row["id"],
             "name": row["name"],
@@ -208,7 +210,8 @@ def _load_all_items():
             "category": "discs",
             "buy_price": 0,
             "sell_price": 0,
-            "icon_index": 0,  # skill discs use the generic attachment icon
+            "icon_index": 0,
+            "actual_element": elem,
         })
 
     return items
@@ -468,13 +471,48 @@ class InventoryEditor(QWidget):
             return
 
         # Sub-categories?
-        subcats = _SUB_CATEGORIES.get(self._current_cat)
-        if subcats:
-            self._build_subcategorized(items, subcats, cat_color, rgb)
+        if self._current_cat == "discs":
+            self._build_disc_subcategorized(items, cat_color, rgb)
         else:
-            # Default sort: by icon_index, then name
-            items.sort(key=lambda i: (i.get("icon_index") or 9999, i["name"].lower()))
-            self._insert_icon_grid(items)
+            subcats = _SUB_CATEGORIES.get(self._current_cat)
+            if subcats:
+                self._build_subcategorized(items, subcats, cat_color, rgb)
+            else:
+                items.sort(key=lambda i: (i.get("icon_index") or 9999, i["name"].lower()))
+                self._insert_icon_grid(items)
+
+    _ELEMENT_NAMES = {
+        -1: "Support", 0: "Neutral", 1: "Fire", 2: "Ice", 3: "Plant",
+        4: "Water", 5: "Electric", 6: "Steel", 7: "Wind",
+        8: "Earth", 9: "Light", 10: "Dark",
+    }
+    _ELEMENT_ORDER = [1, 4, 2, 5, 3, 7, 8, 6, 9, 10, 0, -1]
+
+    def _build_disc_subcategorized(self, items, cat_color, rgb):
+        """Group skill discs by element."""
+        used_ids = set()
+
+        for elem_id in self._ELEMENT_ORDER:
+            elem_name = self._ELEMENT_NAMES.get(elem_id, f"Element {elem_id}")
+            sub_items = [i for i in items
+                         if i.get("actual_element", -1) == elem_id]
+            sub_items.sort(key=lambda i: i["name"].lower())
+            used_ids.update(i["id"] for i in sub_items)
+
+            header = self._build_sub_header(elem_name, len(sub_items),
+                                            cat_color, rgb)
+            self._insert(header)
+
+            if sub_items:
+                self._insert_icon_grid(sub_items)
+
+        remaining = [i for i in items if i["id"] not in used_ids]
+        if remaining:
+            remaining.sort(key=lambda i: i["name"].lower())
+            header = self._build_sub_header("Other", len(remaining),
+                                            cat_color, rgb)
+            self._insert(header)
+            self._insert_icon_grid(remaining)
 
     def _build_subcategorized(self, items, subcats, cat_color, rgb):
         used_ids = set()
