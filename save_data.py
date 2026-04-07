@@ -28,7 +28,7 @@ from save_layout import (DIGI, REGIONS, AGENT, PERSONALITY_NAMES,
                          AGENT_SKILL_STRIDE)
 from app_paths import get_db_path
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 # ── Mod overlay ──────────────────────────────────────────────────────
 _mod_overlay = None
