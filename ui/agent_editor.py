@@ -287,7 +287,7 @@ class _CategoryTab(QWidget):
         unlock_btn = QPushButton("Unlock All")
         unlock_btn.setFixedHeight(24)
         unlock_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        unlock_btn.setToolTip("Free unlock — no AP cost")
+        unlock_btn.setToolTip("Unlock all — AP and rank adjusted automatically")
         unlock_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {TEXT_SECONDARY};
@@ -517,25 +517,38 @@ class _CategoryTab(QWidget):
         name = CATEGORIES[self._cat_id][0]
         reply = QMessageBox.question(
             self, "Unlock",
-            f"Unlock all {name} skills?\nFree — no AP cost.",
+            f"Unlock all {name} skills?\nAP and rank will be adjusted automatically.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
             return
         self._unlock_all_cat_internal()
 
     def _unlock_all_cat_internal(self):
-        """Unlock all skills in this category (no dialog)."""
+        """Unlock all skills in this category (no dialog).
+
+        Sets flags, adds their AP cost to Total Spent, grants matching
+        Available AP, and recalculates Agent Rank for consistency.
+        """
         if not self._save_file:
             return
+        catalog = get_tamer_skill_catalog()
+        added_cost = 0
         for i in range(208):
             _, cat, purchased, _ = self._save_file.read_agent_skill(i)
             if cat == self._cat_id and not purchased:
                 self._save_file.write_agent_skill_flags(i, 1, 1, 1)
+                added_cost += catalog[i]['tp_cost']
         _, count_off = CATEGORIES[self._cat_id]
         # Recount
         total = sum(1 for i in range(208)
                     if self._save_file.read_agent_skill(i)[1] == self._cat_id)
         self._save_file.write_agent_u32(count_off, total)
+        # Update Total Spent and recalculate rank
+        if added_cost > 0:
+            tp_spent = self._save_file.read_agent_u32(0x060)
+            new_spent = tp_spent + added_cost
+            self._save_file.write_agent_u32(0x060, new_spent)
+            self._save_file._update_agent_rank(new_spent)
         self._build_grid()
         self.data_changed.emit()
 
@@ -662,7 +675,7 @@ class AgentEditor(QWidget):
         unlock_all = QPushButton("Unlock All")
         unlock_all.setFixedHeight(22)
         unlock_all.setCursor(Qt.CursorShape.PointingHandCursor)
-        unlock_all.setToolTip("Free unlock ALL skills — no AP cost")
+        unlock_all.setToolTip("Unlock ALL skills — AP and rank adjusted automatically")
         unlock_all.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {ACCENT};
@@ -736,7 +749,7 @@ class AgentEditor(QWidget):
             return
         reply = QMessageBox.question(
             self, "Unlock All",
-            "Unlock ALL agent skills?\nFree — no AP cost.",
+            "Unlock ALL agent skills?\nAP and rank will be adjusted automatically.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
             return
