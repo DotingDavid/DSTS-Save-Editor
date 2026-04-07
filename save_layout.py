@@ -131,7 +131,7 @@ AGENT = {
     'play_time_dbl':  (0x050, 'd',  'CONFIRMED: Play time as Float64 (double). Matches header CSV value exactly: 342510.027029 seconds = 95.1 hours. Updated on every save', 'HIGH', 'read_not_displayed'),
     'money':         (0x058, 'I',  'Money (yen)',                                            'read_not_displayed'),
     'tp_available':  (0x05C, 'I',  'CONFIRMED: Available/unspent Tamer Points. Decreases when skills purchased (455->410 = -45 from buying 1 Valor skill). Separate from +0x060 total TP', 'HIGH', 'read_not_displayed'),
-    'tamer_points':  (0x060, 'I',  'Tamer Points (TP)',                                      'read_not_displayed'),
+    'tamer_points':  (0x060, 'I',  'CONFIRMED: Lifetime total AP spent on skills. Game displays as progress toward next rank (subtracts current rank threshold). Rank derived from this value.', 'HIGH', 'read_not_displayed'),
     'agent_rank':    (0x064, 'I',  'Agent Rank (1-100)',                                     'USED'),
     'valor_count':   (0x068, 'I',  'Valor skill count',                                      'logged'),
     'phil_count':    (0x06C, 'I',  'Philanthropy skill count',                                'logged'),

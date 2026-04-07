@@ -527,24 +527,28 @@ class _CategoryTab(QWidget):
     def _unlock_all_cat_internal(self):
         """Unlock all skills in this category (no dialog).
 
-        Sets flags, then recalculates Total Spent from ALL purchased skills
-        across all categories, and sets rank to match. Available AP is not
-        touched — the player keeps whatever they had.
+        Sets all skill flags to purchased, updates category count,
+        then recalculates rank-progress and ensures Available AP
+        has a comfortable buffer.
         """
         if not self._save_file:
             return
-        catalog = get_tamer_skill_catalog()
         for i in range(208):
             _, cat, purchased, _ = self._save_file.read_agent_skill(i)
             if cat == self._cat_id and not purchased:
                 self._save_file.write_agent_skill_flags(i, 1, 1, 1)
-        _, count_off = CATEGORIES[self._cat_id]
-        # Recount this category
-        total = sum(1 for i in range(208)
-                    if self._save_file.read_agent_skill(i)[1] == self._cat_id)
-        self._save_file.write_agent_u32(count_off, total)
-        # Recalculate total spent from ALL purchased skills across all categories
+
+        # Update category count (skip Loyalty — 0x080 is a game constant, not a count)
+        if self._cat_id in self._save_file._CAT_COUNT_OFFSETS:
+            _, count_off = CATEGORIES[self._cat_id]
+            total = sum(1 for i in range(208)
+                        if self._save_file.read_agent_skill(i)[1] == self._cat_id)
+            self._save_file.write_agent_u32(count_off, total)
         self._save_file.recalc_agent_spent_and_rank()
+        # Ensure Available AP has a buffer (at least 500)
+        tp_avail = self._save_file.read_agent_u32(0x05C)
+        if tp_avail < 500:
+            self._save_file.write_agent_u32(0x05C, 500)
         self._build_grid()
         self.data_changed.emit()
 
@@ -593,12 +597,13 @@ class _CategoryTab(QWidget):
         if returned > 0:
             tp_avail = self._save_file.read_agent_u32(0x05C)
             self._save_file.write_agent_u32(0x05C, tp_avail + returned)
-        # Update category count
-        _, count_off = CATEGORIES[self._cat_id]
-        purchased_count = sum(1 for i in range(208)
-                              if self._save_file.read_agent_skill(i)[1] == self._cat_id
-                              and self._save_file.read_agent_skill(i)[2])
-        self._save_file.write_agent_u32(count_off, purchased_count)
+        # Update category count (skip Loyalty — 0x080 is a game constant, not a count)
+        if self._cat_id in self._save_file._CAT_COUNT_OFFSETS:
+            _, count_off = CATEGORIES[self._cat_id]
+            purchased_count = sum(1 for i in range(208)
+                                  if self._save_file.read_agent_skill(i)[1] == self._cat_id
+                                  and self._save_file.read_agent_skill(i)[2])
+            self._save_file.write_agent_u32(count_off, purchased_count)
         # Recalculate total spent and rank from all remaining purchased skills
         self._save_file.recalc_agent_spent_and_rank()
         self._build_grid()
@@ -667,7 +672,7 @@ class AgentEditor(QWidget):
             "letter-spacing: 3px;")
         tree_header.addWidget(lbl)
 
-        tp_lbl = QLabel("Spent AP:")
+        tp_lbl = QLabel("Total Spent:")
         tp_lbl.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 10px;")
         tree_header.addWidget(tp_lbl)
         self._tp_spin = QSpinBox()
@@ -742,6 +747,12 @@ class AgentEditor(QWidget):
     def set_save_file(self, save_file):
         self._updating = True
         self._save_file = save_file
+
+        # Repair 0x080 if corrupted — it's a game constant (always 3),
+        # not a Loyalty skill count. Previous versions wrote skill counts here.
+        loyalty_val = save_file.read_agent_u32(0x080)
+        if loyalty_val != 3:
+            save_file.write_agent_u32(0x080, 3)
 
         self._name_edit.setText(save_file.read_str(0x0FDE90, 32))
         self._money_spin.setValue(save_file.read_agent_u32(0x058))

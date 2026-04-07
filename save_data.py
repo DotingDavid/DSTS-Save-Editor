@@ -1552,7 +1552,8 @@ class SaveFile:
         self._mark_dirty()
 
     # Category ID → count offset (relative to agent base)
-    _CAT_COUNT_OFFSETS = {1: 0x068, 2: 0x06C, 3: 0x070, 4: 0x074, 5: 0x080}
+    # Loyalty (cat 5) is NOT included — 0x080 is a game constant (always 3), not a skill count
+    _CAT_COUNT_OFFSETS = {1: 0x068, 2: 0x06C, 3: 0x070, 4: 0x074}
 
     def buy_agent_skill(self, skill_index):
         """Buy a skill: set flags, adjust AP, increment category count.
@@ -1587,31 +1588,29 @@ class SaveFile:
             self.write_agent_u32(self._CAT_COUNT_OFFSETS[cat], old + 1)
         return {'purchased': True, 'granted': granted}
 
-    def _update_agent_rank(self, total_spent):
-        """Recalculate agent rank from total spent AP using tamer_ranks thresholds."""
+    def recalc_agent_spent_and_rank(self):
+        """Recalculate lifetime AP spent and agent rank from all purchased skills.
+
+        0x060 = lifetime total AP spent (game displays as progress toward next rank)
+        0x064 = agent rank (highest where lifetime_spent >= threshold)
+        """
+        catalog = get_tamer_skill_catalog()
+        lifetime_spent = 0
+        for i in range(208):
+            _, _, purchased, _ = self.read_agent_skill(i)
+            if purchased:
+                lifetime_spent += catalog[i]['tp_cost']
+        self.write_agent_u32(0x060, lifetime_spent)
+
         db = _get_db()
         rows = db.execute(
             "SELECT rank, required_exp FROM tamer_ranks ORDER BY required_exp DESC"
         ).fetchall()
         for row in rows:
-            if total_spent >= row["required_exp"]:
+            if lifetime_spent >= row["required_exp"]:
                 self.write_agent_u32(0x064, row["rank"])
                 return
-
-    def recalc_agent_spent_and_rank(self):
-        """Recalculate Total Spent AP from all currently purchased skills, then update rank.
-
-        This is the authoritative recalculation — it sums the actual tp_cost of every
-        purchased skill record in the save, writes that to 0x060, and derives rank from it.
-        """
-        catalog = get_tamer_skill_catalog()
-        total_spent = 0
-        for i in range(208):
-            _, _, purchased, _ = self.read_agent_skill(i)
-            if purchased:
-                total_spent += catalog[i]['tp_cost']
-        self.write_agent_u32(0x060, total_spent)
-        self._update_agent_rank(total_spent)
+        self.write_agent_u32(0x064, 1)
 
     def refund_agent_skill(self, skill_index):
         """Refund a skill: clear purchased flag, return TP cost, decrement category count.
