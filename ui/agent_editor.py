@@ -18,6 +18,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
 from ui.style import (ACCENT, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_VALUE,
                        BORDER, BG_INPUT, PERS_COLORS)
 from save_data import get_tamer_skill_catalog, _get_skill_id_to_index
+from save_layout import AGENT_BASE_OFFSET, AGENT_SKILL_OFFSET, AGENT_SKILL_STRIDE
 from app_paths import get_data_dir
 from ui.skill_layout_editor import load_skill_layout
 
@@ -526,29 +527,24 @@ class _CategoryTab(QWidget):
     def _unlock_all_cat_internal(self):
         """Unlock all skills in this category (no dialog).
 
-        Sets flags, adds their AP cost to Total Spent, grants matching
-        Available AP, and recalculates Agent Rank for consistency.
+        Sets flags, then recalculates Total Spent from ALL purchased skills
+        across all categories, and sets rank to match. Available AP is not
+        touched — the player keeps whatever they had.
         """
         if not self._save_file:
             return
         catalog = get_tamer_skill_catalog()
-        added_cost = 0
         for i in range(208):
             _, cat, purchased, _ = self._save_file.read_agent_skill(i)
             if cat == self._cat_id and not purchased:
                 self._save_file.write_agent_skill_flags(i, 1, 1, 1)
-                added_cost += catalog[i]['tp_cost']
         _, count_off = CATEGORIES[self._cat_id]
-        # Recount
+        # Recount this category
         total = sum(1 for i in range(208)
                     if self._save_file.read_agent_skill(i)[1] == self._cat_id)
         self._save_file.write_agent_u32(count_off, total)
-        # Update Total Spent and recalculate rank
-        if added_cost > 0:
-            tp_spent = self._save_file.read_agent_u32(0x060)
-            new_spent = tp_spent + added_cost
-            self._save_file.write_agent_u32(0x060, new_spent)
-            self._save_file._update_agent_rank(new_spent)
+        # Recalculate total spent from ALL purchased skills across all categories
+        self._save_file.recalc_agent_spent_and_rank()
         self._build_grid()
         self.data_changed.emit()
 
@@ -576,13 +572,35 @@ class _CategoryTab(QWidget):
         self._refund_all_cat_internal()
 
     def _refund_all_cat_internal(self):
-        """Refund all skills in this category (no dialog)."""
+        """Refund all skills in this category (no dialog).
+
+        Clears purchased flags, returns AP to available pool, then
+        recalculates Total Spent and Rank from all purchased skills.
+        """
         if not self._save_file:
             return
+        catalog = get_tamer_skill_catalog()
+        returned = 0
         for i in range(208):
             _, cat, purchased, _ = self._save_file.read_agent_skill(i)
             if cat == self._cat_id and purchased:
-                self._save_file.refund_agent_skill(i)
+                # Clear purchased only — leave visible/unknown intact
+                off = AGENT_BASE_OFFSET + AGENT_SKILL_OFFSET + i * AGENT_SKILL_STRIDE
+                self._save_file._data[off + 8] = 0
+                self._save_file._mark_dirty()
+                returned += catalog[i]['tp_cost']
+        # Return AP to available pool
+        if returned > 0:
+            tp_avail = self._save_file.read_agent_u32(0x05C)
+            self._save_file.write_agent_u32(0x05C, tp_avail + returned)
+        # Update category count
+        _, count_off = CATEGORIES[self._cat_id]
+        purchased_count = sum(1 for i in range(208)
+                              if self._save_file.read_agent_skill(i)[1] == self._cat_id
+                              and self._save_file.read_agent_skill(i)[2])
+        self._save_file.write_agent_u32(count_off, purchased_count)
+        # Recalculate total spent and rank from all remaining purchased skills
+        self._save_file.recalc_agent_spent_and_rank()
         self._build_grid()
         self.data_changed.emit()
 

@@ -1579,12 +1579,8 @@ class SaveFile:
         # Set all three flags to match natural purchased state
         self.write_agent_skill_flags(skill_index, 1, 1, 1)
         self.write_agent_u32(0x05C, tp_avail - cost)
-        # Update total spent
-        tp_spent = self.read_agent_u32(0x060)
-        new_spent = tp_spent + cost
-        self.write_agent_u32(0x060, new_spent)
-        # Update agent rank based on new total spent
-        self._update_agent_rank(new_spent)
+        # Recalculate total spent and rank from all purchased skills
+        self.recalc_agent_spent_and_rank()
         # Increment category count
         if cat in self._CAT_COUNT_OFFSETS:
             old = self.read_agent_u32(self._CAT_COUNT_OFFSETS[cat])
@@ -1601,6 +1597,21 @@ class SaveFile:
             if total_spent >= row["required_exp"]:
                 self.write_agent_u32(0x064, row["rank"])
                 return
+
+    def recalc_agent_spent_and_rank(self):
+        """Recalculate Total Spent AP from all currently purchased skills, then update rank.
+
+        This is the authoritative recalculation — it sums the actual tp_cost of every
+        purchased skill record in the save, writes that to 0x060, and derives rank from it.
+        """
+        catalog = get_tamer_skill_catalog()
+        total_spent = 0
+        for i in range(208):
+            _, _, purchased, _ = self.read_agent_skill(i)
+            if purchased:
+                total_spent += catalog[i]['tp_cost']
+        self.write_agent_u32(0x060, total_spent)
+        self._update_agent_rank(total_spent)
 
     def refund_agent_skill(self, skill_index):
         """Refund a skill: clear purchased flag, return TP cost, decrement category count.
@@ -1621,11 +1632,8 @@ class SaveFile:
         # Return AP
         tp_avail = self.read_agent_u32(0x05C)
         self.write_agent_u32(0x05C, tp_avail + cost)
-        # Reduce total spent and recalculate rank
-        tp_spent = self.read_agent_u32(0x060)
-        new_spent = tp_spent - cost if tp_spent >= cost else 0
-        self.write_agent_u32(0x060, new_spent)
-        self._update_agent_rank(new_spent)
+        # Recalculate total spent and rank from all purchased skills
+        self.recalc_agent_spent_and_rank()
         # Decrement category count
         if cat in self._CAT_COUNT_OFFSETS:
             old = self.read_agent_u32(self._CAT_COUNT_OFFSETS[cat])
