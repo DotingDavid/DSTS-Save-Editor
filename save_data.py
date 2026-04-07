@@ -28,7 +28,7 @@ from save_layout import (DIGI, REGIONS, AGENT, PERSONALITY_NAMES,
                          AGENT_SKILL_STRIDE)
 from app_paths import get_db_path
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 # ── Mod overlay ──────────────────────────────────────────────────────
 _mod_overlay = None
@@ -1558,31 +1558,49 @@ class SaveFile:
         """Buy a skill: set flags, adjust AP, increment category count.
 
         If Available AP < cost, auto-grants enough AP so the purchase
-        always succeeds. Updates both Available AP (0x05C) and
-        Total Spent (0x060) to keep the save consistent.
+        always succeeds. Updates Available AP (0x05C), Total Spent (0x060),
+        and Agent Rank (0x064) to keep the save consistent.
+
+        Returns dict: {purchased: bool, granted: int} where granted is
+        the extra AP that was auto-added (0 if user had enough).
         """
         _, cat, purchased, _ = self.read_agent_skill(skill_index)
         if purchased:
-            return False
+            return {'purchased': False, 'granted': 0}
         catalog = get_tamer_skill_catalog()
         cost = catalog[skill_index]['tp_cost']
         tp_avail = self.read_agent_u32(0x05C)
         # Auto-grant AP if insufficient
+        granted = 0
         if tp_avail < cost:
-            needed = cost - tp_avail
-            tp_avail += needed
+            granted = cost - tp_avail
+            tp_avail += granted
             self.write_agent_u32(0x05C, tp_avail)
         # Set all three flags to match natural purchased state
         self.write_agent_skill_flags(skill_index, 1, 1, 1)
         self.write_agent_u32(0x05C, tp_avail - cost)
         # Update total spent
         tp_spent = self.read_agent_u32(0x060)
-        self.write_agent_u32(0x060, tp_spent + cost)
+        new_spent = tp_spent + cost
+        self.write_agent_u32(0x060, new_spent)
+        # Update agent rank based on new total spent
+        self._update_agent_rank(new_spent)
         # Increment category count
         if cat in self._CAT_COUNT_OFFSETS:
             old = self.read_agent_u32(self._CAT_COUNT_OFFSETS[cat])
             self.write_agent_u32(self._CAT_COUNT_OFFSETS[cat], old + 1)
-        return True
+        return {'purchased': True, 'granted': granted}
+
+    def _update_agent_rank(self, total_spent):
+        """Recalculate agent rank from total spent AP using tamer_ranks thresholds."""
+        db = _get_db()
+        rows = db.execute(
+            "SELECT rank, required_exp FROM tamer_ranks ORDER BY required_exp DESC"
+        ).fetchall()
+        for row in rows:
+            if total_spent >= row["required_exp"]:
+                self.write_agent_u32(0x064, row["rank"])
+                return
 
     def refund_agent_skill(self, skill_index):
         """Refund a skill: clear purchased flag, return TP cost, decrement category count.
@@ -1603,10 +1621,11 @@ class SaveFile:
         # Return AP
         tp_avail = self.read_agent_u32(0x05C)
         self.write_agent_u32(0x05C, tp_avail + cost)
-        # Reduce total spent
+        # Reduce total spent and recalculate rank
         tp_spent = self.read_agent_u32(0x060)
-        if tp_spent >= cost:
-            self.write_agent_u32(0x060, tp_spent - cost)
+        new_spent = tp_spent - cost if tp_spent >= cost else 0
+        self.write_agent_u32(0x060, new_spent)
+        self._update_agent_rank(new_spent)
         # Decrement category count
         if cat in self._CAT_COUNT_OFFSETS:
             old = self.read_agent_u32(self._CAT_COUNT_OFFSETS[cat])
@@ -1657,7 +1676,12 @@ class SaveFile:
             basename = os.path.basename(self.path)
             ts = datetime.now().strftime('%Y%m%d_%H%M%S')
             backup_path = os.path.join(backup_dir, f"{basename}.{ts}.bak")
-            shutil.copy2(self.path, backup_path)
+            try:
+                shutil.copy2(self.path, backup_path)
+            except Exception as e:
+                raise RuntimeError(
+                    f"Backup failed — save aborted to protect your data.\n{e}"
+                ) from e
 
             # Prune old auto-backups for this slot, keep only the newest
             existing = sorted(

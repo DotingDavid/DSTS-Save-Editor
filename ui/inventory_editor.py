@@ -36,7 +36,7 @@ ITEM_CATEGORIES = {
     None: "Other",
 }
 
-_CAT_ORDER = [0, 1, "eggs", 2, 4, "discs", 5, 6, 7, 8, 9, None]
+_CAT_ORDER = [0, 1, "eggs", 2, 4, "discs", 5, 6, 7, 8, None]
 
 _CAT_COLORS = {
     0: "#66BB6A",   # Recovery — green

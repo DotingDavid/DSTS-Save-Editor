@@ -493,7 +493,12 @@ class _CategoryTab(QWidget):
                             show_toast(self.window(),
                                        f"Requires: {pname}", "info")
                             return
-            self._save_file.buy_agent_skill(skill_index)
+            result = self._save_file.buy_agent_skill(skill_index)
+            if result['granted'] > 0:
+                from ui.toast import show_toast
+                show_toast(self.window(),
+                           f"Auto-granted {result['granted']} AP to complete purchase",
+                           "warning", duration=4000)
 
         # Update cell
         cell = self._skill_cells.get(skill_index)
@@ -506,6 +511,7 @@ class _CategoryTab(QWidget):
         self.data_changed.emit()
 
     def _unlock_all_cat(self):
+        """Unlock all skills in this category with confirmation dialog."""
         if not self._save_file:
             return
         name = CATEGORIES[self._cat_id][0]
@@ -514,6 +520,12 @@ class _CategoryTab(QWidget):
             f"Unlock all {name} skills?\nFree — no AP cost.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._unlock_all_cat_internal()
+
+    def _unlock_all_cat_internal(self):
+        """Unlock all skills in this category (no dialog)."""
+        if not self._save_file:
             return
         for i in range(208):
             _, cat, purchased, _ = self._save_file.read_agent_skill(i)
@@ -528,6 +540,7 @@ class _CategoryTab(QWidget):
         self.data_changed.emit()
 
     def _refund_all_cat(self):
+        """Refund all skills in this category with confirmation dialog."""
         if not self._save_file:
             return
         catalog = get_tamer_skill_catalog()
@@ -546,6 +559,12 @@ class _CategoryTab(QWidget):
             f"Refund {count} {name} skills?\n+{total_tp} AP returned.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._refund_all_cat_internal()
+
+    def _refund_all_cat_internal(self):
+        """Refund all skills in this category (no dialog)."""
+        if not self._save_file:
             return
         for i in range(208):
             _, cat, purchased, _ = self._save_file.read_agent_skill(i)
@@ -617,7 +636,7 @@ class AgentEditor(QWidget):
             "letter-spacing: 3px;")
         tree_header.addWidget(lbl)
 
-        tp_lbl = QLabel("AP:")
+        tp_lbl = QLabel("Spent AP:")
         tp_lbl.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 10px;")
         tree_header.addWidget(tp_lbl)
         self._tp_spin = QSpinBox()
@@ -707,6 +726,8 @@ class AgentEditor(QWidget):
     def _on_cat_changed(self):
         self._updating = True
         self._tp_avail_spin.setValue(self._save_file.read_agent_u32(0x05C))
+        self._tp_spin.setValue(self._save_file.read_agent_u32(0x060))
+        self._rank_label.setText(f"Rank: {self._save_file.read_agent_u32(0x064)}")
         self._updating = False
         self.data_changed.emit()
 
@@ -720,7 +741,7 @@ class AgentEditor(QWidget):
         if reply != QMessageBox.StandardButton.Yes:
             return
         for tab in self._cat_tabs.values():
-            tab._unlock_all_cat()
+            tab._unlock_all_cat_internal()
 
     def _refund_all(self):
         if not self._save_file:
@@ -739,7 +760,7 @@ class AgentEditor(QWidget):
         if reply != QMessageBox.StandardButton.Yes:
             return
         for tab in self._cat_tabs.values():
-            tab._refund_all_cat()
+            tab._refund_all_cat_internal()
 
     def _on_name_changed(self):
         if not self._updating and self._save_file:
