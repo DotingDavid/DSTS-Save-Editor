@@ -587,7 +587,7 @@ def peek_save_info(path):
             return None
         data = save_crypto.decrypt(raw)
         name_bytes = data[0x0FDE90:0x0FDE90 + 32]
-        name = name_bytes.split(b'\x00')[0].decode('ascii', errors='replace').strip()
+        name = name_bytes.split(b'\x00')[0].decode('utf-8', errors='replace').strip()
         money = struct.unpack_from('<I', data, AGENT_BASE_OFFSET + 0x058)[0]
         uid = read_save_uid(data)
         # Find stride base in party/box region (same logic as _find_stride_base)
@@ -616,7 +616,7 @@ def peek_save_info(path):
                 if 1 <= did <= 10000:
                     nb = data[off + 4:off + 36]
                     nick = nb.split(b'\x00')[0].decode(
-                        'ascii', errors='replace').strip()
+                        'utf-8', errors='replace').strip()
                 else:
                     did = 0
                 party.append({'db_id': did, 'nickname': nick})
@@ -685,7 +685,7 @@ class SaveFile:
         if end == -1:
             logger.warning("No null terminator in string at offset 0x%X (max_len=%d)", offset, max_len)
             end = offset + max_len
-        return self._data[offset:end].decode('ascii', errors='replace')
+        return self._data[offset:end].decode('utf-8', errors='replace')
 
     def write_u8(self, offset, value):
         self._data[offset] = value & 0xFF
@@ -754,6 +754,11 @@ class SaveFile:
                                                      row["def_"], row["int_"],
                                                      row["spi"], row["spd"]]
 
+        # Pre-build set of known localized names per species (for nickname detection)
+        localized_names = {}  # db_id -> set of known names (EN, JA, FR, etc.)
+        for row in db.execute("SELECT db_id, name FROM localized_names"):
+            localized_names.setdefault(row["db_id"], set()).add(row["name"])
+
         # Inject modded species so they appear in the roster
         if _mod_overlay and _mod_overlay.is_active:
             for db_id, info in _mod_overlay.new_digimon.items():
@@ -786,13 +791,15 @@ class SaveFile:
 
                 if slot < PARTY_SLOTS:
                     entry = self._parse_entry(d, name_off, "party_box",
-                                              id_to_info, base_stats_cache, stat_names)
+                                              id_to_info, base_stats_cache, stat_names,
+                                              localized_names)
                     if entry is not None:
                         entry["location"] = "party"
                         party_entries.append(entry)
                 elif active == 1:
                     entry = self._parse_entry(d, name_off, "party_box",
-                                              id_to_info, base_stats_cache, stat_names)
+                                              id_to_info, base_stats_cache, stat_names,
+                                              localized_names)
                     if entry is not None:
                         entry["location"] = "box"
                         box_entries.append(entry)
@@ -800,7 +807,8 @@ class SaveFile:
                     # First active=0 entry is the box list head (newest entry).
                     # Include it, then stop — everything after is stale.
                     entry = self._parse_entry(d, name_off, "party_box",
-                                              id_to_info, base_stats_cache, stat_names)
+                                              id_to_info, base_stats_cache, stat_names,
+                                              localized_names)
                     if entry is not None:
                         entry["location"] = "box"
                         box_entries.append(entry)
@@ -825,7 +833,8 @@ class SaveFile:
                 if active == 1 and db_id > 0 and db_id in id_to_info:
                     found_active = True
                     entry = self._parse_entry(d, name_off, "farm",
-                                              id_to_info, base_stats_cache, stat_names)
+                                              id_to_info, base_stats_cache, stat_names,
+                                              localized_names)
                     if entry is not None:
                         farm_entries.append(entry)
                 elif found_active and active == 0:
@@ -833,7 +842,8 @@ class SaveFile:
 
         return party_entries + box_entries + farm_entries
 
-    def _parse_entry(self, d, offset, region, id_to_info, base_stats_cache, stat_names):
+    def _parse_entry(self, d, offset, region, id_to_info, base_stats_cache,
+                     stat_names, localized_names=None):
         """Parse a single Digimon entry. Returns dict or None if invalid."""
         db_id = struct.unpack('<I', d[offset - 4:offset])[0]
         info = id_to_info.get(db_id)
@@ -842,7 +852,7 @@ class SaveFile:
             name_end = d.find(b'\x00', offset, offset + 32)
             if name_end > offset:
                 try:
-                    fallback_name = d[offset:name_end].decode('ascii')
+                    fallback_name = d[offset:name_end].decode('utf-8')
                     if len(fallback_name) >= 2:
                         info = {"id": db_id, "name": fallback_name,
                                 "stage": "", "attribute": "", "type": ""}
@@ -854,10 +864,7 @@ class SaveFile:
         name_end = d.find(b'\x00', offset, offset + 32)
         if name_end <= offset:
             return None
-        try:
-            entry_name = d[offset:name_end].decode('ascii')
-        except (UnicodeDecodeError, ValueError):
-            return None
+        entry_name = d[offset:name_end].decode('utf-8', errors='replace')
         if not entry_name or len(entry_name) < 2:
             return None
 
@@ -907,7 +914,11 @@ class SaveFile:
                 break
         evo_history.reverse()  # oldest first for chronological display
 
-        nickname = entry_name if entry_name != info["name"] else None
+        # A nickname is only set if the name doesn't match any known
+        # localized name (EN, JA, FR, DE, ES, IT, PT, KO, ZH) for this species.
+        known = localized_names.get(db_id, set()) if localized_names else set()
+        is_known_name = entry_name in known or entry_name == info["name"]
+        nickname = entry_name if not is_known_name else None
 
         return {
             "_offset": offset,
@@ -984,8 +995,12 @@ class SaveFile:
         self.write_i32(entry_offset + 0x60, level)
 
     def write_nickname(self, entry_offset, name):
-        """Write a nickname (up to 30 chars ASCII). Pads with null bytes."""
-        name_bytes = name.encode('ascii', errors='replace')[:30]
+        """Write a nickname (up to 30 bytes UTF-8). Pads with null bytes."""
+        raw = name.encode('utf-8')
+        if len(raw) > 30:
+            # Truncate without splitting a multi-byte character
+            raw = raw[:30].decode('utf-8', errors='ignore').encode('utf-8')
+        name_bytes = raw
         # Clear the full 32-byte name field
         for i in range(32):
             self._data[entry_offset + i] = 0
@@ -1295,7 +1310,7 @@ class SaveFile:
 
         db_id = struct.unpack('<I', d[entry_offset - 4:entry_offset])[0]
         name_end = d.find(b'\x00', entry_offset, entry_offset + 32)
-        display_name = d[entry_offset:name_end].decode('ascii', errors='replace')
+        display_name = d[entry_offset:name_end].decode('utf-8', errors='replace')
 
         return {
             "format_version": 2,
@@ -1504,7 +1519,10 @@ class SaveFile:
 
     def write_player_name(self, name):
         """Write player name to agent struct (+0x10) and header CSV."""
-        name_bytes = name.encode('ascii', errors='replace')[:30]
+        raw = name.encode('utf-8')
+        if len(raw) > 30:
+            raw = raw[:30].decode('utf-8', errors='ignore').encode('utf-8')
+        name_bytes = raw
         # Write to agent struct at absolute 0x0FDE90 (agent_base + 0x10)
         off = AGENT_BASE_OFFSET + 0x10
         for i in range(32):
