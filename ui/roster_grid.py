@@ -50,14 +50,20 @@ class GridSlot(QWidget):
         self._name_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 9px;")
         layout.addWidget(self._name_label)
 
+        self._info_label = QLabel()
+        self._info_label.setFixedHeight(12)
+        self._info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._info_label.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 8px;")
+        layout.addWidget(self._info_label)
+
         if entry:
             pm = get_icon(entry["species"], ICON_SIZE)
             self._icon.setPixmap(pm)
             name = entry.get("nickname") or entry["species"]
-            if len(name) > 9:
-                name = name[:8] + "…"
+            self._name_label.setText(name)
             lv = entry.get("level", 0)
-            self._name_label.setText(f"{name} {lv}")
+            pers = entry.get("personality", "")
+            self._info_label.setText(f"Lv{lv} {pers}")
             self.setToolTip(
                 f"{entry.get('nickname') or entry['species']}\n"
                 f"Lv{entry['level']} {entry['personality']}\n"
@@ -66,6 +72,7 @@ class GridSlot(QWidget):
             self._icon.setStyleSheet(
                 f"border: 1px dashed {BORDER}; border-radius: 4px;")
             self._name_label.setText("")
+            self._info_label.setText("")
 
         self._update_style()
 
